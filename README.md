@@ -1,6 +1,6 @@
 # Moment-DETR
 
-QVHighlights: Detecting Moments and Highlights in Videos via Natural Language Queries
+[QVHighlights: Detecting Moments and Highlights in Videos via Natural Language Queries](https://arxiv.org/abs/2107.09609)
 
 [Jie Lei](http://www.cs.unc.edu/~jielei/), 
 [Tamara L. Berg](http://tamaraberg.com/), [Mohit Bansal](http://www.cs.unc.edu/~mbansal/)
