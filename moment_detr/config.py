@@ -169,10 +169,12 @@ class BaseOptions(object):
             saved_options = load_json(os.path.join(opt.model_dir, self.saved_option_filename))
             for arg in saved_options:  # use saved options to overwrite all BaseOptions args.
                 if arg not in ["results_root", "num_workers", "nms_thd", "debug",  # "max_before_nms", "max_after_nms"
-                               "eval_split_name", "eval_path", "max_pred_l", "min_pred_l",
+                               "max_pred_l", "min_pred_l",
                                "resume", "resume_all", "no_sort_results"]:
                     setattr(opt, arg, saved_options[arg])
             # opt.no_core_driver = True
+            if opt.eval_results_dir is not None:
+                opt.results_dir = opt.eval_results_dir
         else:
             if opt.exp_id is None:
                 raise ValueError("--exp_id is required for at a training option!")
@@ -218,5 +220,7 @@ class TestOptions(BaseOptions):
         BaseOptions.initialize(self)
         # also need to specify --eval_split_name
         self.parser.add_argument("--eval_id", type=str, help="evaluation id")
+        self.parser.add_argument("--eval_results_dir", type=str, default=None,
+                                 help="dir to save results, if not set, fall back to training results_dir")
         self.parser.add_argument("--model_dir", type=str,
                                  help="dir contains the model file, will be converted to absolute path afterwards")

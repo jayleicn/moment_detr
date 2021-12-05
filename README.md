@@ -1,12 +1,17 @@
 # Moment-DETR
 
-[QVHighlights: Detecting Moments and Highlights in Videos via Natural Language Queries](https://arxiv.org/abs/2107.09609)
+[QVHighlights: Detecting Moments and Highlights in Videos via Natural Language Queries](https://arxiv.org/abs/2107.09609), NeurIPS 2021
 
 [Jie Lei](http://www.cs.unc.edu/~jielei/), 
 [Tamara L. Berg](http://tamaraberg.com/), [Mohit Bansal](http://www.cs.unc.edu/~mbansal/)
 
 
-For dataset details, please check [data/README.md](data/README.md)
+This repo contains a copy of QVHighlights dataset for moment retrieval and highlight detections. For details, please check [data/README.md](data/README.md)
+
+This repo also hosts the Moment-DETR model, a new model that predicts moment coordinates and saliency scores end-to-end based on a given text query. This released code supports pre-training, fine-tuning, and evaluation of Moment-DETR on the QVHighlights datasets. It also supports running prediction on your own raw videos and text queries. 
+
+
+
 
 ## Getting Started 
 
@@ -41,6 +46,7 @@ conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch
 # install other python packages
 pip install tqdm ipython easydict tensorboard tabulate scikit-learn pandas
 ```
+The PyTorch version we tested is `1.9.0`.
 
 ### Training
 
@@ -75,6 +81,49 @@ Note that this finetuning process is the same as standard training except that i
 
 ### Evaluation and Codalab Submission
 Please check [standalone_eval/README.md](standalone_eval/README.md) for details.
+
+
+## Run predictions on your own videos and queries
+You may also want to run Moment-DETR model on your own videos and queries. 
+First you need to add a few libraries for feature extraction to your environment. Before this, you should have already installed PyTorch and other libraries for running Moment-DETR following instuctions in previous sections.
+```bash
+pip install ffmpeg-python ftfy regex
+```
+Next, run the example provided in this repo:
+```bash
+PYTHONPATH=$PYTHONPATH:. python run_on_video/run.py
+```
+This will load the Moment-DETR model [checkpoint](run_on_video/moment_detr_ckpt/model_best.ckpt) trained with CLIP image and text features, and make predictions for the video [RoripwjYFp8_60.0_210.0.mp4](run_on_video/example/RoripwjYFp8_60.0_210.0.mp4) with its associated query in [run_on_video/example/queries.jsonl](run_on_video/example/queries.jsonl).
+The output will look like the following:
+```
+Build models...
+Loading feature extractors...
+Loading CLIP models
+Loading trained Moment-DETR model...
+Run prediction...
+------------------------------idx0
+>> query: Chef makes pizza and cuts it up.
+>> video_path: run_on_video/example/RoripwjYFp8_60.0_210.0.mp4
+>> GT moments: [[106, 122]]
+>> Predicted moments ([start_in_seconds, end_in_seconds, score]): [
+    [49.967, 64.9129, 0.9421], 
+    [66.4396, 81.0731, 0.9271], 
+    [105.9434, 122.0372, 0.9234], 
+    [93.2057, 103.3713, 0.2222], 
+    ..., 
+    [45.3834, 52.2183, 0.0005]
+   ]
+>> GT saliency scores (only localized 2-sec clips): 
+    [[2, 3, 3], [2, 3, 3], ...]
+>> Predicted saliency scores (for all 2-sec clip): 
+    [-0.9258, -0.8115, -0.7598, ..., 0.0739, 0.1068]   
+```
+You can see the 3rd ranked moment `[105.9434, 122.0372]` matches quite well with the ground truth of `[106, 122]`, with a confidence score of `0.9234`.
+You may want to refer to [data/README.md](data/README.md) for more info about how the ground-truth is organized.
+Your predictions might slightly differ from the predictions here, depends on your environment.
+
+To run predictions on your own videos and queries, please take a look at the `run_example` function inside the [run_on_video/run.py](run_on_video/run.py) file.
+
 
 ## Acknowledgement
 We thank [Linjie Li](https://scholar.google.com/citations?user=WR875gYAAAAJ&hl=en) for the helpful discussions.

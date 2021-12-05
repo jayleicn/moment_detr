@@ -124,7 +124,7 @@ class MomentDETR(nn.Module):
                 proj_vid_mem=proj_vid_mem
             ))
 
-        out["saliency_scores"] = self.saliency_proj(vid_mem).squeeze()  # (bsz, L_vid)
+        out["saliency_scores"] = self.saliency_proj(vid_mem).squeeze(-1)  # (bsz, L_vid)
 
         if self.aux_loss:
             # assert proj_queries and proj_txt_mem
