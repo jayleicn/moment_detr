@@ -5,9 +5,7 @@
 [Jie Lei](http://www.cs.unc.edu/~jielei/), 
 [Tamara L. Berg](http://tamaraberg.com/), [Mohit Bansal](http://www.cs.unc.edu/~mbansal/)
 
-
 This repo contains a copy of QVHighlights dataset for moment retrieval and highlight detections. For details, please check [data/README.md](data/README.md)
-
 This repo also hosts the Moment-DETR model, a new model that predicts moment coordinates and saliency scores end-to-end based on a given text query. This released code supports pre-training, fine-tuning, and evaluation of Moment-DETR on the QVHighlights datasets. It also supports running prediction on your own raw videos and text queries. 
 
 
