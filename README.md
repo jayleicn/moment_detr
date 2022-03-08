@@ -6,8 +6,24 @@
 [Tamara L. Berg](http://tamaraberg.com/), [Mohit Bansal](http://www.cs.unc.edu/~mbansal/)
 
 This repo contains a copy of QVHighlights dataset for moment retrieval and highlight detections. For details, please check [data/README.md](data/README.md)
-This repo also hosts the Moment-DETR model, a new model that predicts moment coordinates and saliency scores end-to-end based on a given text query. This released code supports pre-training, fine-tuning, and evaluation of Moment-DETR on the QVHighlights datasets. It also supports running prediction on your own raw videos and text queries. 
+This repo also hosts the Moment-DETR model (see overview below), a new model that predicts moment coordinates and saliency scores end-to-end based on a given text query. This released code supports pre-training, fine-tuning, and evaluation of Moment-DETR on the QVHighlights datasets. It also supports running prediction on your own raw videos and text queries. 
 
+
+![model](./res/model_overview.png)
+
+
+## Table of Contents
+
+* [Getting Started](#getting-started)
+    * [Prerequisites](#prerequisites)
+    * [Training](#training)
+    * [Inference](#inference)
+    * [Pretraining and Finetuning](#pretraining-and-finetuning)
+    * [Evaluation and Codalab Submission](#evaluation-and-codalab-submission)
+    * [Train Moment-DETR on your own dataset](#train-moment-detr-on-your-own-dataset)
+* [Demo: Run predictions on your own videos and queries](#run-predictions-on-your-own-videos-and-queries)
+* [Acknowledgement](#acknowledgement)
+* [LICENSE](#license)
 
 
 
@@ -28,7 +44,7 @@ extract it under project root directory:
 ```
 tar -xf path/to/moment_detr_features.tar.gz
 ```
-
+The features are extracted using Linjie's [HERO_Video_Feature_Extractor](https://github.com/linjieli222/HERO_Video_Feature_Extractor).
 
 2. Install dependencies.
 
@@ -79,6 +95,13 @@ Note that this finetuning process is the same as standard training except that i
 
 ### Evaluation and Codalab Submission
 Please check [standalone_eval/README.md](standalone_eval/README.md) for details.
+
+
+### Train Moment-DETR on your own dataset
+To train Moment-DETR on your own dataset, please prepare your dataset annotations following the format 
+of QVHighlights annotations in [data](./data), and extract features using [HERO_Video_Feature_Extractor](https://github.com/linjieli222/HERO_Video_Feature_Extractor).
+Next copy the script [moment_detr/scripts/train.sh](./moment_detr/scripts/train.sh) and modify the dataset specific parameters 
+such as annotation and feature paths. Now you are ready to use this script for training as described in [Training](#training).
 
 
 ## Run predictions on your own videos and queries
