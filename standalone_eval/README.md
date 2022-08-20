@@ -46,7 +46,7 @@ The prediction file [sample_val_preds.jsonl](sample_val_preds.jsonl) is in [JSON
 ### Codalab Submission
 To test your model's performance on `test` split, 
 please submit both `val` and `test` predictions to our 
-[Codalab evaluation server](https://competitions.codalab.org/competitions/33504). 
+[Codalab evaluation server](https://codalab.lisn.upsaclay.fr/competitions/6937). 
 The submission file should be a single `.zip ` file (no enclosing folder) 
 that contains the two prediction files 
 `hl_val_submission.jsonl` and `hl_test_submission.jsonl`, each of the `*submission.jsonl` file 
