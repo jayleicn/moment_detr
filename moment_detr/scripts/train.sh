@@ -1,6 +1,6 @@
 dset_name=hl
 ctx_mode=video_tef
-v_feat_types=slowfast_clip
+v_feat_types=clip
 t_feat_type=clip 
 results_root=results
 exp_id=exp
@@ -11,7 +11,7 @@ eval_path=data/highlight_val_release.jsonl
 eval_split_name=val
 
 ######## setup video+text features
-feat_root=features
+feat_root=/nfs/data3/goldhofer/momentDETR/features
 
 # video features
 v_feat_dim=0
