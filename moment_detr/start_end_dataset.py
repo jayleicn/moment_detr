@@ -56,6 +56,7 @@ class StartEndDataset(Dataset):
         self.lang_feats = None
         self.q_feat_cache = None
         self.qid_cache = None
+        self.rng = np.random.default_rng()
         if "val" in data_path or "test" in data_path:
             assert txt_drop_ratio == 0
 
@@ -87,7 +88,8 @@ class StartEndDataset(Dataset):
             model_inputs["query_feat"] = self._get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
         if self.use_video:
             if "mad_dataset" in self.data_path:
-                model_inputs["video_feat"] = self._mad_get_video_feat_by_vid(meta["vid"],meta["relevant_windows"])  # (Lv, Dv)
+                model_inputs["video_feat"] = self._mad_get_video_feat_by_vid(meta["vid"],
+                                                                             meta)  # (Lv, Dv)
             else:
                 model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
 
@@ -242,7 +244,7 @@ class StartEndDataset(Dataset):
         v_feat = np.concatenate(v_feat_list, axis=1)
         return torch.from_numpy(v_feat)  # (Lv, D)
 
-    def _mad_get_video_feat_by_vid(self, vid,relevant_windows):
+    def _mad_get_video_feat_by_vid(self, vid, meta):
         if self.video_feats is None:
             self.video_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
 
@@ -253,21 +255,24 @@ class StartEndDataset(Dataset):
         if self.normalize_v:
             self.video_feat_cache = l2_normalize_np_array(self.video_feat_cache)
 
-        self.video_feat_cache = self._slice_window(self.video_feat_cache,relevant_windows)
+        self.video_feat_cache = self._slice_window(self.video_feat_cache, meta)
         return torch.from_numpy(self.video_feat_cache)  # (Lv, D)
 
-    def _slice_window(self, frame_features,relevant_windows):
+    def _slice_window(self, frame_features, meta):
         f_max_v_l = self.max_v_l * 10
-        f_relevant_windows = np.multiply(relevant_windows, 10)
-        window_length = f_relevant_windows[1]-f_relevant_windows[0]
+        f_relevant_windows = np.multiply(meta["relevant_windows"], 10)
+        window_length = f_relevant_windows[1] - f_relevant_windows[0]
         if f_max_v_l > window_length:
-            left_offset = np.floor(np.random.random()*(f_max_v_l-window_length))
-            right_offset = f_max_v_l-window_length-left_offset
-            window = frame_features[f_relevant_windows[0]-left_offset:f_relevant_windows[1]+right_offset,:]
+            left_offset = int(np.floor(np.random.random() * (f_max_v_l - window_length)))
+            right_offset = int(f_max_v_l - window_length - left_offset)
+            assert (int(f_relevant_windows[1] + right_offset - int(f_relevant_windows[0] - left_offset)) == f_max_v_l,
+                    "Window lengths dont match")
+            window = frame_features[int(f_relevant_windows[0] - left_offset):int(f_relevant_windows[1] + right_offset),
+                     :]
         else:
             pass
 
-        return window[::10]
+        return self.rng.choice(window, size=int(f_max_v_l/10), replace=False, axis=0, shuffle=False)
 
 
 def start_end_collate(batch):
