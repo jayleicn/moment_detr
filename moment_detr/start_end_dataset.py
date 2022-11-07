@@ -56,7 +56,7 @@ class StartEndDataset(Dataset):
         self.lang_feats = None
         self.q_feat_cache = None
         self.qid_cache = None
-        self.rng = np.random.default_rng()
+        self.rng = np.random.default_rng(42)
         if "val" in data_path or "test" in data_path:
             assert txt_drop_ratio == 0
 
@@ -88,8 +88,8 @@ class StartEndDataset(Dataset):
             model_inputs["query_feat"] = self._get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
         if self.use_video:
             if "mad_dataset" in self.data_path:
-                model_inputs["video_feat"] = self._mad_get_video_feat_by_vid(meta["vid"],
-                                                                             meta)  # (Lv, Dv)
+                model_inputs["video_feat"], meta = self._mad_get_video_feat_by_vid(meta["vid"],
+                                                                                   meta)  # (Lv, Dv)
             else:
                 model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
 
@@ -255,24 +255,44 @@ class StartEndDataset(Dataset):
         if self.normalize_v:
             self.video_feat_cache = l2_normalize_np_array(self.video_feat_cache)
 
-        self.video_feat_cache = self._slice_window(self.video_feat_cache, meta)
-        return torch.from_numpy(self.video_feat_cache)  # (Lv, D)
+        self.video_feat_cache, meta = self._slice_window(self.video_feat_cache, meta)
+        return torch.from_numpy(self.video_feat_cache), meta  # (Lv, D)
 
     def _slice_window(self, frame_features, meta):
-        f_max_v_l = self.max_v_l * 10
-        f_relevant_windows = np.multiply(meta["relevant_windows"], 10)
-        window_length = f_relevant_windows[1] - f_relevant_windows[0]
-        if f_max_v_l > window_length:
-            left_offset = int(np.floor(np.random.random() * (f_max_v_l - window_length)))
-            right_offset = int(f_max_v_l - window_length - left_offset)
-            assert (int(f_relevant_windows[1] + right_offset - int(f_relevant_windows[0] - left_offset)) == f_max_v_l,
-                    "Window lengths dont match")
-            window = frame_features[int(f_relevant_windows[0] - left_offset):int(f_relevant_windows[1] + right_offset),
-                     :]
-        else:
-            pass
+        f_max_v_l = self.max_v_l * 10  # qv samples at 0.5FPS, MAD at 5 FPS
+        f_relevant_windows = np.multiply(meta["relevant_windows"], 10)  # relevant windows seconds -> frames
+        f_window_length = f_relevant_windows[1] - f_relevant_windows[0]
 
-        return self.rng.choice(window, size=int(f_max_v_l/10), replace=False, axis=0, shuffle=False)
+        assert f_max_v_l > f_window_length, "moment longer then max sample length"
+
+        random_window_offset = self.rng.random()
+        f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
+        f_right_offset = int(f_max_v_l - f_window_length - f_left_offset)
+
+        assert (
+            int(f_relevant_windows[1] + f_right_offset - int(f_relevant_windows[0] - f_left_offset)) == f_max_v_l,
+            "Window lengths dont match")
+        
+        window = frame_features[
+                 int(f_relevant_windows[0] - f_left_offset):int(f_relevant_windows[1] + f_right_offset),
+                 :]
+
+        meta = self._adjust_meta(meta, f_left_offset, f_window_length)
+        return self.rng.choice(window, size=self.max_v_l, replace=False, axis=0, shuffle=False), meta
+
+
+    def _adjust_meta(self, meta, f_left_offset, f_window_length):
+        new_window = [int(np.floor(f_left_offset / 10)), int(np.floor(f_left_offset / 10) + f_window_length / 10)]
+        new_clip_ids = [i for i in range(int(new_window[0] / 2), int(new_window[1] / 2))]
+
+        assert new_window[1] - new_window[0] == meta["relevant_windows"][1] - meta["relevant_windows"][
+            0], "adjusting windows error"
+        assert len(meta["saliency_scores"]) == len(meta["relevant_clip_ids"]), "adjusting windows saliency error"
+        assert meta["relevant_windows"][0]/2 == meta["relevant_clip_ids"][0], "adjusting windows clip id error"
+
+        meta["relevant_windows"] = new_window
+        meta["relevant_clip_ids"] = new_clip_ids
+        return meta
 
 
 def start_end_collate(batch):
