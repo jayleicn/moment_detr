@@ -268,9 +268,13 @@ class StartEndDataset(Dataset):
 
         assert f_max_v_l > f_window_length, "moment longer then max sample length"
 
-        random_window_offset = self.rng.random()
-        f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
-        f_right_offset = int(f_max_v_l - f_window_length - f_left_offset)
+        f_right_offset = np.inf
+        while f_right_offset+f_relevant_windows[1] > frame_features.shape[0]:
+            random_window_offset = self.rng.random()
+            f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
+            if f_relevant_windows[0]-f_left_offset < 0:
+                f_left_offset = f_relevant_windows[0]
+            f_right_offset = int(f_max_v_l - f_window_length - f_left_offset)
 
         assert int(f_relevant_windows[1] + f_right_offset) - int(
             f_relevant_windows[0] - f_left_offset) == f_max_v_l, "Window lengths dont match"
@@ -283,7 +287,9 @@ class StartEndDataset(Dataset):
         return self.rng.choice(window, size=self.max_v_l, replace=False, axis=0, shuffle=False), meta
 
     def _adjust_meta(self, meta, f_left_offset, f_window_length):
-        new_window = [int(np.floor(f_left_offset / 5)), int(np.floor(f_left_offset / 5) + f_window_length / 5)]
+        window_start = int(np.floor(f_left_offset / 5)) if int(np.floor(f_left_offset / 5)) % 2 == 0 else int(
+            np.floor(f_left_offset / 5)) - 1
+        new_window = [window_start, int(window_start + f_window_length / 5)]
         new_clip_ids = [i for i in range(int(new_window[0] / 2), int(new_window[1] / 2))]
 
         assert new_window[1] - new_window[0] == meta["relevant_windows"][1] - meta["relevant_windows"][
