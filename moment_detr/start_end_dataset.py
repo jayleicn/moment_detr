@@ -50,8 +50,11 @@ class StartEndDataset(Dataset):
         self.max_windows = max_windows  # maximum number of windows to use as labels
         self.span_loss_type = span_loss_type
         self.txt_drop_ratio = txt_drop_ratio
-        self._feat_cache = None
+        self.video_feat_cache = None
         self.vid_cache = None
+        self.video_feats = None
+        self.lang_feats = None
+        self.lang_feat_cache = None
         if "val" in data_path or "test" in data_path:
             assert txt_drop_ratio == 0
 
@@ -77,7 +80,8 @@ class StartEndDataset(Dataset):
         meta = self.data[index]
 
         model_inputs = dict()
-        model_inputs["query_feat"] = self._get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
+        #model_inputs["query_feat"] = self._get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
+        model_inputs["query_feat"] = self._mad_get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
         if self.use_video:
             #model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
             model_inputs["video_feat"] = self._mad_get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
@@ -186,6 +190,22 @@ class StartEndDataset(Dataset):
             q_feat = self.random_drop_rows(q_feat)
         return torch.from_numpy(q_feat)  # (D, ) or (Lq, D)
 
+    def _mad_get_query_feat_by_qid(self, qid):
+        if self.lang_feats is None:
+            self.lang_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_language_token_features.h5', 'r')
+
+        qid = qid.split("_")[-1]
+        if (self.lang_feat_cache is None) or (qid != self.vid_cache):
+            self.lang_feat_cache = self.lang_feats[qid]
+
+        if self.q_feat_type == "last_hidden_state":
+            q_feat = self.lang_feat_cache[:self.max_q_l]
+        if self.normalize_t:
+            q_feat = l2_normalize_np_array(self.lang_feat_cache)
+        if self.txt_drop_ratio > 0:
+            q_feat = self.random_drop_rows(self.lang_feat_cache)
+        return torch.from_numpy(q_feat)  # (D, ) or (Lq, D)
+
     def random_drop_rows(self, embeddings):
         """randomly mask num_drop rows in embeddings to be zero.
         Args:
@@ -213,12 +233,12 @@ class StartEndDataset(Dataset):
         return torch.from_numpy(v_feat)  # (Lv, D)
 
     def _mad_get_video_feat_by_vid(self, vid):
+        if self.video_feats is None:
+            self.video_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
 
-        video_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
+        if (self.video_feat_cache is None) or (vid != self.vid_cache):
+            self.video_feat_cache = torch.tensor(self.video_feats[vid], dtype=torch.float32)
 
-        if (self._feat_cache is None) or (vid != self.vid_cache):
-            self._feat_cache = torch.tensor(video_feats[vid], dtype=torch.float32)
-            
         if self.normalize_v:
             _feat = l2_normalize_np_array(_feat)
 
