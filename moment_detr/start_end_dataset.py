@@ -87,7 +87,7 @@ class StartEndDataset(Dataset):
             model_inputs["query_feat"] = self._get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
         if self.use_video:
             if "mad_dataset" in self.data_path:
-                model_inputs["video_feat"] = self._mad_get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
+                model_inputs["video_feat"] = self._mad_get_video_feat_by_vid(meta["vid"],meta["relevant_windows"])  # (Lv, Dv)
             else:
                 model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
 
@@ -208,7 +208,7 @@ class StartEndDataset(Dataset):
         if self.q_feat_type == "last_hidden_state":
             self.q_feat_cache = self.q_feat_cache[:self.max_q_l]
             if self.q_feat_cache.shape[0] > self.max_q_l:
-                print(
+                logger.info(
                     f'Query feature length ({self.q_feat_cache.shape[0]}) is longer than set max query length ({self.max_q_l})"')
         if self.normalize_t:
             self.q_feat_cache = l2_normalize_np_array(self.q_feat_cache)
@@ -242,7 +242,7 @@ class StartEndDataset(Dataset):
         v_feat = np.concatenate(v_feat_list, axis=1)
         return torch.from_numpy(v_feat)  # (Lv, D)
 
-    def _mad_get_video_feat_by_vid(self, vid):
+    def _mad_get_video_feat_by_vid(self, vid,relevant_windows):
         if self.video_feats is None:
             self.video_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
 
@@ -253,7 +253,21 @@ class StartEndDataset(Dataset):
         if self.normalize_v:
             self.video_feat_cache = l2_normalize_np_array(self.video_feat_cache)
 
+        self.video_feat_cache = self._slice_window(self.video_feat_cache,relevant_windows)
         return torch.from_numpy(self.video_feat_cache)  # (Lv, D)
+
+    def _slice_window(self, frame_features,relevant_windows):
+        f_max_v_l = self.max_v_l * 10
+        f_relevant_windows = np.multiply(relevant_windows, 10)
+        window_length = f_relevant_windows[1]-f_relevant_windows[0]
+        if f_max_v_l > window_length:
+            left_offset = np.floor(np.random.random()*(f_max_v_l-window_length))
+            right_offset = f_max_v_l-window_length-left_offset
+            window = frame_features[f_relevant_windows[0]-left_offset:f_relevant_windows[1]+right_offset,:]
+        else:
+            pass
+
+        return window[::10]
 
 
 def start_end_collate(batch):
