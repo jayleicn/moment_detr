@@ -97,6 +97,8 @@ class StartEndDataset(Dataset):
         else:
             ctx_l = self.max_v_l
 
+        assert self.vid_cache == self.qid_cache, "vid and qid dont match"
+
         if self.use_tef:
             tef_st = torch.arange(0, ctx_l, 1.0) / ctx_l
             tef_ed = tef_st + 1.0 / ctx_l
@@ -259,8 +261,9 @@ class StartEndDataset(Dataset):
         return torch.from_numpy(self.video_feat_cache), meta  # (Lv, D)
 
     def _slice_window(self, frame_features, meta):
-        f_max_v_l = self.max_v_l * 10  # qv samples at 0.5FPS, MAD at 5 FPS
-        f_relevant_windows = np.multiply(meta["relevant_windows"], 10)  # relevant windows seconds -> frames
+        f_max_v_l = self.max_v_l * 5  # qv samples at 0.5FPS, MAD at 5 FPS
+
+        f_relevant_windows = np.multiply(meta["relevant_windows"], 5)  # relevant windows seconds -> frames @ 5 FPS
         f_window_length = f_relevant_windows[1] - f_relevant_windows[0]
 
         assert f_max_v_l > f_window_length, "moment longer then max sample length"
@@ -269,9 +272,8 @@ class StartEndDataset(Dataset):
         f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
         f_right_offset = int(f_max_v_l - f_window_length - f_left_offset)
 
-        assert (
-            int(f_relevant_windows[1] + f_right_offset - int(f_relevant_windows[0] - f_left_offset)) == f_max_v_l,
-            "Window lengths dont match")
+        assert int(f_relevant_windows[1] + f_right_offset) - int(
+            f_relevant_windows[0] - f_left_offset) == f_max_v_l, "Window lengths dont match"
 
         window = frame_features[
                  int(f_relevant_windows[0] - f_left_offset):int(f_relevant_windows[1] + f_right_offset),
@@ -280,15 +282,14 @@ class StartEndDataset(Dataset):
         meta = self._adjust_meta(meta, f_left_offset, f_window_length)
         return self.rng.choice(window, size=self.max_v_l, replace=False, axis=0, shuffle=False), meta
 
-
     def _adjust_meta(self, meta, f_left_offset, f_window_length):
-        new_window = [int(np.floor(f_left_offset / 10)), int(np.floor(f_left_offset / 10) + f_window_length / 10)]
+        new_window = [int(np.floor(f_left_offset / 5)), int(np.floor(f_left_offset / 5) + f_window_length / 5)]
         new_clip_ids = [i for i in range(int(new_window[0] / 2), int(new_window[1] / 2))]
 
         assert new_window[1] - new_window[0] == meta["relevant_windows"][1] - meta["relevant_windows"][
             0], "adjusting windows error"
         assert len(meta["saliency_scores"]) == len(meta["relevant_clip_ids"]), "adjusting windows saliency error"
-        assert meta["relevant_windows"][0]/2 == meta["relevant_clip_ids"][0], "adjusting windows clip id error"
+        assert meta["relevant_windows"][0] / 2 == meta["relevant_clip_ids"][0], "adjusting windows clip id error"
 
         meta["relevant_windows"] = new_window
         meta["relevant_clip_ids"] = new_clip_ids
