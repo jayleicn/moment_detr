@@ -54,7 +54,8 @@ class StartEndDataset(Dataset):
         self.vid_cache = None
         self.video_feats = None
         self.lang_feats = None
-        self.lang_feat_cache = None
+        self.q_feat_cache = None
+        self.qid_cache = None
         if "val" in data_path or "test" in data_path:
             assert txt_drop_ratio == 0
 
@@ -80,11 +81,16 @@ class StartEndDataset(Dataset):
         meta = self.data[index]
 
         model_inputs = dict()
-        #model_inputs["query_feat"] = self._get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
-        model_inputs["query_feat"] = self._mad_get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
+        if "mad_dataset" in self.data_path:
+            model_inputs["query_feat"] = self._mad_get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
+        else:
+            model_inputs["query_feat"] = self._get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
         if self.use_video:
-            #model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
-            model_inputs["video_feat"] = self._mad_get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
+            if "mad_dataset" in self.data_path:
+                model_inputs["video_feat"] = self._mad_get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
+            else:
+                model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
+
             ctx_l = len(model_inputs["video_feat"])
         else:
             ctx_l = self.max_v_l
@@ -195,16 +201,20 @@ class StartEndDataset(Dataset):
             self.lang_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_language_token_features.h5', 'r')
 
         qid = qid.split("_")[-1]
-        if (self.lang_feat_cache is None) or (qid != self.vid_cache):
-            self.lang_feat_cache = self.lang_feats[qid]
+        if (self.q_feat_cache is None) or (qid != self.qid_cache):
+            self.q_feat_cache = np.array(self.lang_feats[qid]).astype(np.float32)
+        self.qid_cache = qid
 
         if self.q_feat_type == "last_hidden_state":
-            q_feat = self.lang_feat_cache[:self.max_q_l]
+            self.q_feat_cache = self.q_feat_cache[:self.max_q_l]
+            if self.q_feat_cache.shape[0] > self.max_q_l:
+                print(
+                    f'Query feature length ({self.q_feat_cache.shape[0]}) is longer than set max query length ({self.max_q_l})"')
         if self.normalize_t:
-            q_feat = l2_normalize_np_array(self.lang_feat_cache)
+            self.q_feat_cache = l2_normalize_np_array(self.q_feat_cache)
         if self.txt_drop_ratio > 0:
-            q_feat = self.random_drop_rows(self.lang_feat_cache)
-        return torch.from_numpy(q_feat)  # (D, ) or (Lq, D)
+            self.q_feat_cache = self.random_drop_rows(self.q_feat_cache)
+        return torch.from_numpy(self.q_feat_cache)  # (D, ) or (Lq, D)
 
     def random_drop_rows(self, embeddings):
         """randomly mask num_drop rows in embeddings to be zero.
@@ -237,12 +247,13 @@ class StartEndDataset(Dataset):
             self.video_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
 
         if (self.video_feat_cache is None) or (vid != self.vid_cache):
-            self.video_feat_cache = torch.tensor(self.video_feats[vid], dtype=torch.float32)
+            self.video_feat_cache = np.array(self.video_feats[vid]).astype(np.float32)
 
+        self.vid_cache = vid
         if self.normalize_v:
-            _feat = l2_normalize_np_array(_feat)
+            self.video_feat_cache = l2_normalize_np_array(self.video_feat_cache)
 
-        return _feat  # (Lv, D)
+        return torch.from_numpy(self.video_feat_cache)  # (Lv, D)
 
 
 def start_end_collate(batch):
