@@ -272,7 +272,7 @@ class StartEndDataset(Dataset):
         assert (
             int(f_relevant_windows[1] + f_right_offset - int(f_relevant_windows[0] - f_left_offset)) == f_max_v_l,
             "Window lengths dont match")
-        
+
         window = frame_features[
                  int(f_relevant_windows[0] - f_left_offset):int(f_relevant_windows[1] + f_right_offset),
                  :]
