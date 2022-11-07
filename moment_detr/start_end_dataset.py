@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 from tqdm import tqdm
+import h5py
 import random
 import logging
 from os.path import join, exists
@@ -49,6 +50,8 @@ class StartEndDataset(Dataset):
         self.max_windows = max_windows  # maximum number of windows to use as labels
         self.span_loss_type = span_loss_type
         self.txt_drop_ratio = txt_drop_ratio
+        self._feat_cache = None
+        self.vid_cache = None
         if "val" in data_path or "test" in data_path:
             assert txt_drop_ratio == 0
 
@@ -76,7 +79,8 @@ class StartEndDataset(Dataset):
         model_inputs = dict()
         model_inputs["query_feat"] = self._get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
         if self.use_video:
-            model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
+            #model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
+            model_inputs["video_feat"] = self._mad_get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
             ctx_l = len(model_inputs["video_feat"])
         else:
             ctx_l = self.max_v_l
@@ -108,11 +112,11 @@ class StartEndDataset(Dataset):
             gt_st = gt_ed
 
         if gt_st != gt_ed:
-            pos_clip_indices = random.sample(range(gt_st, gt_ed+1), k=max_n)
+            pos_clip_indices = random.sample(range(gt_st, gt_ed + 1), k=max_n)
         else:
             pos_clip_indices = [gt_st, gt_st]
 
-        neg_pool = list(range(0, gt_st)) + list(range(gt_ed+1, ctx_l))
+        neg_pool = list(range(0, gt_st)) + list(range(gt_ed + 1, ctx_l))
         neg_clip_indices = random.sample(neg_pool, k=max_n)
         return pos_clip_indices, neg_clip_indices
 
@@ -134,8 +138,8 @@ class StartEndDataset(Dataset):
         # indices in the whole video
         # the min(_, ctx_l-1) here is incorrect, but should not cause
         # much troubles since this should be rarely used.
-        hard_pos_clip_indices = [min(rel_clip_ids[idx], ctx_l-1) for idx in sort_indices[-max_n:]]
-        hard_neg_clip_indices = [min(rel_clip_ids[idx], ctx_l-1) for idx in sort_indices[:max_n]]
+        hard_pos_clip_indices = [min(rel_clip_ids[idx], ctx_l - 1) for idx in sort_indices[-max_n:]]
+        hard_neg_clip_indices = [min(rel_clip_ids[idx], ctx_l - 1) for idx in sort_indices[:max_n]]
         easy_pos_clip_indices = []
         easy_neg_clip_indices = []
         if add_easy_negative:
@@ -207,6 +211,18 @@ class StartEndDataset(Dataset):
         v_feat_list = [e[:min_len] for e in v_feat_list]
         v_feat = np.concatenate(v_feat_list, axis=1)
         return torch.from_numpy(v_feat)  # (Lv, D)
+
+    def _mad_get_video_feat_by_vid(self, vid):
+
+        video_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
+
+        if (self._feat_cache is None) or (vid != self.vid_cache):
+            self._feat_cache = torch.tensor(video_feats[vid], dtype=torch.float32)
+            
+        if self.normalize_v:
+            _feat = l2_normalize_np_array(_feat)
+
+        return _feat  # (Lv, D)
 
 
 def start_end_collate(batch):
