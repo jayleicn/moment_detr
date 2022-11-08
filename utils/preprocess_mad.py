@@ -6,8 +6,8 @@ train_data = json.load(open(f'{root}/annotations/MAD_{SPLIT}.json', 'r'))
 moment_detr_dict = {}
 mad_transformed = []
 for k in train_data.keys():
-    lowest_clip = round(train_data[k]["timestamps"][0])
-    highest_clip = round(train_data[k]["timestamps"][1])
+    lowest_clip = int(np.floor(round(train_data[k]["timestamps"][0])))
+    highest_clip = int(np.ceil(round(train_data[k]["timestamps"][1])))
     if lowest_clip % 2 != 0:
         lowest_clip -= 1
     if highest_clip % 2 != 0:

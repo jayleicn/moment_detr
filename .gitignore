@@ -26,7 +26,8 @@ credentials
 *.rar
 *.tar
 *.zip
-
+*.pkl
+*.pickel
 # Logs and databases #
 ######################
 *.log

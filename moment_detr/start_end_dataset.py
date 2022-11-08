@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 import numpy as np
 from tqdm import tqdm
 import h5py
+import pickle
 import random
 import logging
 from os.path import join, exists
@@ -57,6 +58,7 @@ class StartEndDataset(Dataset):
         self.q_feat_cache = None
         self.qid_cache = None
         self.rng = np.random.default_rng(42)
+        self.meta_log = {}
         if "val" in data_path or "test" in data_path:
             assert txt_drop_ratio == 0
 
@@ -269,10 +271,10 @@ class StartEndDataset(Dataset):
         assert f_max_v_l > f_window_length, "moment longer then max sample length"
 
         f_right_offset = np.inf
-        while f_right_offset+f_relevant_windows[1] > frame_features.shape[0]:
+        while f_right_offset + f_relevant_windows[1] > frame_features.shape[0]:
             random_window_offset = self.rng.random()
             f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
-            if f_relevant_windows[0]-f_left_offset < 0:
+            if f_relevant_windows[0] - f_left_offset < 0:
                 f_left_offset = f_relevant_windows[0]
             f_right_offset = int(f_max_v_l - f_window_length - f_left_offset)
 
@@ -283,8 +285,19 @@ class StartEndDataset(Dataset):
                  int(f_relevant_windows[0] - f_left_offset):int(f_relevant_windows[1] + f_right_offset),
                  :]
 
+        old_meta = meta
         meta = self._adjust_meta(meta, f_left_offset, f_window_length)
+        self._log_meta(old_meta,meta)
         return self.rng.choice(window, size=self.max_v_l, replace=False, axis=0, shuffle=False), meta
+
+    def _log_meta(self, old_meta, new_meta):
+        self.meta_log[old_meta["qid"]] = {"old_meta": old_meta, "new_meta": new_meta}
+        if len(self.meta_log) % 100 == 0:
+            print(f'saving meta log with length: {len(self.meta_log)}')
+            with open('data/meta_log.pkl', 'wb') as f:
+                print("a")
+                pickle.dump(self.meta_log, f)
+                print("b")
 
     def _adjust_meta(self, meta, f_left_offset, f_window_length):
         window_start = int(np.floor(f_left_offset / 5)) if int(np.floor(f_left_offset / 5)) % 2 == 0 else int(
@@ -297,8 +310,9 @@ class StartEndDataset(Dataset):
         assert len(meta["saliency_scores"]) == len(meta["relevant_clip_ids"]), "adjusting windows saliency error"
         assert meta["relevant_windows"][0] / 2 == meta["relevant_clip_ids"][0], "adjusting windows clip id error"
 
-        meta["relevant_windows"] = new_window
+        meta["relevant_windows"] = [new_window]
         meta["relevant_clip_ids"] = new_clip_ids
+        meta.pop("duration")
         return meta
 
 
