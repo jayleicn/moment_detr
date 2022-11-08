@@ -100,7 +100,7 @@ class StartEndDataset(Dataset):
         else:
             ctx_l = self.max_v_l
 
-        assert self.vid_cache == self.qid_cache, "vid and qid dont match"
+        #assert self.vid_cache == self.qid_cache, "vid and qid dont match"
 
         if self.use_tef:
             tef_st = torch.arange(0, ctx_l, 1.0) / ctx_l
@@ -211,9 +211,7 @@ class StartEndDataset(Dataset):
 
     def _mad_get_query_feat_by_qid(self, qid):
 
-        qid = qid.split("_")[-1]
-        if (self.q_feat_cache is None) or (qid != self.qid_cache):
-            self.q_feat_cache = np.array(self.lang_feats[qid]).astype(np.float32)
+        self.q_feat_cache = np.array(self.lang_feats[qid]).astype(np.float32)
         self.qid_cache = qid
 
         if self.q_feat_type == "last_hidden_state":

@@ -5,7 +5,7 @@ video_tef
 --train_path
 /nfs/data3/goldhofer/mad_dataset/annotations/MAD_train_transformed.json
 --eval_path
-data/highlight_val_release.jsonl
+/nfs/data3/goldhofer/mad_dataset/annotations/MAD_val_transformed.json
 --eval_split_name
 val
 --v_feat_dirs

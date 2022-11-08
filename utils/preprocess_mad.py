@@ -36,7 +36,7 @@ for mad_path in [ f'{root}/annotations/MAD_val.json',f'{root}/annotations/MAD_tr
                                                         range(int(lowest_clip / 2), int(highest_clip / 2))]}
                 mad_transformed_train.append(moment_detr_dict)
             else:
-                moment_detr_dict = {"qid": k + "_" + train_data[k]["movie"].split("_")[0],
+                moment_detr_dict = {"qid": k + "_" + train_data[k]["movie"],
                                     "query": train_data[k]["sentence"],
                                     "duration": train_data[k]["movie_duration"],
                                     "vid": train_data[k]["movie"],
