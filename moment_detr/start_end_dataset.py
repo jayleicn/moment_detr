@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 from tqdm import tqdm
+import copy
 import h5py
 import pickle
 import random
@@ -270,25 +271,34 @@ class StartEndDataset(Dataset):
 
         assert f_max_v_l > f_window_length, "moment longer then max sample length"
 
-        f_right_offset = np.inf
-        while f_right_offset + f_relevant_windows[1] > frame_features.shape[0]:
-            random_window_offset = self.rng.random()
-            f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
-            if f_relevant_windows[0] - f_left_offset < 0:
-                f_left_offset = f_relevant_windows[0]
-            f_right_offset = int(f_max_v_l - f_window_length - f_left_offset)
+        random_window_offset = self.rng.random()
+        f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
+        f_right_offset = int(f_max_v_l - f_window_length - f_left_offset)
 
-        assert int(f_relevant_windows[1] + f_right_offset) - int(
-            f_relevant_windows[0] - f_left_offset) == f_max_v_l, "Window lengths dont match"
+        f_right_offset, f_left_offset = self._check_offsets(f_right_offset, f_left_offset, f_relevant_windows,
+                                                            f_max_v_l)
 
         window = frame_features[
                  int(f_relevant_windows[0] - f_left_offset):int(f_relevant_windows[1] + f_right_offset),
                  :]
 
-        old_meta = meta
+        old_meta = copy.deepcopy(meta)
         meta = self._adjust_meta(meta, f_left_offset, f_window_length)
-        self._log_meta(old_meta,meta)
+        self._log_meta(old_meta, meta)
         return self.rng.choice(window, size=self.max_v_l, replace=False, axis=0, shuffle=False), meta
+
+    def _check_offsets(self, f_right_offset, f_left_offset, f_relevant_windows, f_max_v_l):
+        if f_relevant_windows[0] - f_left_offset < 0:
+            f_left_offset = int(f_relevant_windows[0])
+            f_right_offset = int(f_max_v_l - (f_relevant_windows[1] - f_relevant_windows[0]) - f_left_offset)
+        if f_relevant_windows[1] + f_right_offset > self.video_feat_cache.shape[0]:
+            f_left_offset += f_right_offset
+            f_right_offset = 0
+
+        assert int(f_relevant_windows[1] + f_right_offset) - int(
+            f_relevant_windows[0] - f_left_offset) == f_max_v_l, "Window lengths dont match"
+        
+        return f_right_offset, f_left_offset
 
     def _log_meta(self, old_meta, new_meta):
         self.meta_log[old_meta["qid"]] = {"old_meta": old_meta, "new_meta": new_meta}
@@ -298,6 +308,7 @@ class StartEndDataset(Dataset):
                 print("a")
                 pickle.dump(self.meta_log, f)
                 print("b")
+        return
 
     def _adjust_meta(self, meta, f_left_offset, f_window_length):
         window_start = int(np.floor(f_left_offset / 5)) if int(np.floor(f_left_offset / 5)) % 2 == 0 else int(

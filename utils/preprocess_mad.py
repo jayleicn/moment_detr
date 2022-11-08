@@ -1,4 +1,5 @@
 import json, os
+import numpy as np
 
 SPLIT = 'train'
 root = '/nfs/data3/goldhofer/mad_dataset'
