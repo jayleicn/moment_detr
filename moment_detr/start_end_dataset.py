@@ -54,7 +54,7 @@ class StartEndDataset(Dataset):
         self.txt_drop_ratio = txt_drop_ratio
         self.video_feat_cache = None
         self.vid_cache = None
-        self.video_feats = None
+        self.video_feats = self.get_video_feats()
         self.lang_feats = None
         self.q_feat_cache = None
         self.qid_cache = None
@@ -203,6 +203,9 @@ class StartEndDataset(Dataset):
             q_feat = self.random_drop_rows(q_feat)
         return torch.from_numpy(q_feat)  # (D, ) or (Lq, D)
 
+    def get_video_feats(self):
+        return h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
+
     def _mad_get_query_feat_by_qid(self, qid):
         if self.lang_feats is None:
             self.lang_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_language_token_features.h5', 'r')
@@ -250,18 +253,15 @@ class StartEndDataset(Dataset):
         return torch.from_numpy(v_feat)  # (Lv, D)
 
     def _mad_get_video_feat_by_vid(self, vid, meta):
-        if self.video_feats is None:
-            self.video_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
-
-        if (self.video_feat_cache is None) or (vid != self.vid_cache):
+        if vid != self.vid_cache:
             self.video_feat_cache = np.array(self.video_feats[vid]).astype(np.float32)
+            self.vid_cache = vid
 
-        self.vid_cache = vid
-        if self.normalize_v:
-            self.video_feat_cache = l2_normalize_np_array(self.video_feat_cache)
+            if self.normalize_v:
+                self.video_feat_cache = l2_normalize_np_array(self.video_feat_cache)
 
-        self.video_feat_cache, meta = self._slice_window(self.video_feat_cache, meta)
-        return torch.from_numpy(self.video_feat_cache), meta  # (Lv, D)
+        video_feat_cache, meta = self._slice_window(self.video_feat_cache, meta)
+        return torch.from_numpy(video_feat_cache), meta  # (Lv, D)
 
     def _slice_window(self, frame_features, meta):
         f_max_v_l = self.max_v_l * 5  # qv samples at 0.5FPS, MAD at 5 FPS
@@ -275,29 +275,37 @@ class StartEndDataset(Dataset):
         f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
         f_right_offset = int(f_max_v_l - f_window_length - f_left_offset)
 
-        f_right_offset, f_left_offset = self._check_offsets(f_right_offset, f_left_offset, f_relevant_windows,
-                                                            f_max_v_l)
+        f_right_offset, f_left_offset = self._check_offsets(f_right_offset,
+                                                            f_left_offset,
+                                                            f_relevant_windows,
+                                                            f_max_v_l,
+                                                            frame_features)
 
         window = frame_features[
                  int(f_relevant_windows[0] - f_left_offset):int(f_relevant_windows[1] + f_right_offset),
                  :]
 
         old_meta = copy.deepcopy(meta)
-        meta = self._adjust_meta(meta, f_left_offset, f_window_length)
+        meta = self._adjust_meta(meta,
+                                 f_left_offset,
+                                 f_window_length)
         self._log_meta(old_meta, meta)
-        return self.rng.choice(window, size=self.max_v_l, replace=False, axis=0, shuffle=False), meta
+        window = self.rng.choice(window, size=self.max_v_l, replace=False, axis=0, shuffle=False)
+        return window, meta
 
-    def _check_offsets(self, f_right_offset, f_left_offset, f_relevant_windows, f_max_v_l):
+    def _check_offsets(self, f_right_offset, f_left_offset, f_relevant_windows, f_max_v_l, frame_features):
         if f_relevant_windows[0] - f_left_offset < 0:
-            f_left_offset = int(f_relevant_windows[0])
-            f_right_offset = int(f_max_v_l - (f_relevant_windows[1] - f_relevant_windows[0]) - f_left_offset)
-        if f_relevant_windows[1] + f_right_offset > self.video_feat_cache.shape[0]:
+            f_right_offset += f_left_offset
+            f_left_offset = 0
+        if f_relevant_windows[1] + f_right_offset > frame_features.shape[0]:
             f_left_offset += f_right_offset
             f_right_offset = 0
 
         assert int(f_relevant_windows[1] + f_right_offset) - int(
             f_relevant_windows[0] - f_left_offset) == f_max_v_l, "Window lengths dont match"
-        
+
+        assert f_relevant_windows[1] + f_right_offset != f_relevant_windows[0] - f_left_offset, "Zero window length"
+
         return f_right_offset, f_left_offset
 
     def _log_meta(self, old_meta, new_meta):
@@ -305,9 +313,7 @@ class StartEndDataset(Dataset):
         if len(self.meta_log) % 100 == 0:
             print(f'saving meta log with length: {len(self.meta_log)}')
             with open('data/meta_log.pkl', 'wb') as f:
-                print("a")
                 pickle.dump(self.meta_log, f)
-                print("b")
         return
 
     def _adjust_meta(self, meta, f_left_offset, f_window_length):
