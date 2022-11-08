@@ -55,7 +55,7 @@ class StartEndDataset(Dataset):
         self.video_feat_cache = None
         self.vid_cache = None
         self.video_feats = self.get_video_feats()
-        self.lang_feats = None
+        self.lang_feats = self.get_lang_feats()
         self.q_feat_cache = None
         self.qid_cache = None
         self.rng = np.random.default_rng(42)
@@ -206,9 +206,10 @@ class StartEndDataset(Dataset):
     def get_video_feats(self):
         return h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
 
+    def get_lang_feats(self):
+        return h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_language_token_features.h5', 'r')
+
     def _mad_get_query_feat_by_qid(self, qid):
-        if self.lang_feats is None:
-            self.lang_feats = h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_language_token_features.h5', 'r')
 
         qid = qid.split("_")[-1]
         if (self.q_feat_cache is None) or (qid != self.qid_cache):
@@ -269,7 +270,7 @@ class StartEndDataset(Dataset):
         f_relevant_windows = np.multiply(meta["relevant_windows"], 5)  # relevant windows seconds -> frames @ 5 FPS
         f_window_length = f_relevant_windows[1] - f_relevant_windows[0]
 
-        assert f_max_v_l > f_window_length, "moment longer then max sample length"
+        #assert f_max_v_l > f_window_length, "moment longer then max sample length"
 
         random_window_offset = self.rng.random()
         f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
@@ -289,7 +290,7 @@ class StartEndDataset(Dataset):
         meta = self._adjust_meta(meta,
                                  f_left_offset,
                                  f_window_length)
-        self._log_meta(old_meta, meta)
+        #self._log_meta(old_meta, meta)
         window = self.rng.choice(window, size=self.max_v_l, replace=False, axis=0, shuffle=False)
         return window, meta
 
@@ -301,10 +302,10 @@ class StartEndDataset(Dataset):
             f_left_offset += f_right_offset
             f_right_offset = 0
 
-        assert int(f_relevant_windows[1] + f_right_offset) - int(
-            f_relevant_windows[0] - f_left_offset) == f_max_v_l, "Window lengths dont match"
+        #assert int(f_relevant_windows[1] + f_right_offset) - int(
+        #    f_relevant_windows[0] - f_left_offset) == f_max_v_l, "Window lengths dont match"
 
-        assert f_relevant_windows[1] + f_right_offset != f_relevant_windows[0] - f_left_offset, "Zero window length"
+        #assert f_relevant_windows[1] + f_right_offset != f_relevant_windows[0] - f_left_offset, "Zero window length"
 
         return f_right_offset, f_left_offset
 
@@ -322,14 +323,14 @@ class StartEndDataset(Dataset):
         new_window = [window_start, int(window_start + f_window_length / 5)]
         new_clip_ids = [i for i in range(int(new_window[0] / 2), int(new_window[1] / 2))]
 
-        assert new_window[1] - new_window[0] == meta["relevant_windows"][1] - meta["relevant_windows"][
-            0], "adjusting windows error"
-        assert len(meta["saliency_scores"]) == len(meta["relevant_clip_ids"]), "adjusting windows saliency error"
-        assert meta["relevant_windows"][0] / 2 == meta["relevant_clip_ids"][0], "adjusting windows clip id error"
+        #assert new_window[1] - new_window[0] == meta["relevant_windows"][1] - meta["relevant_windows"][
+        #    0], "adjusting windows error"
+        #assert len(meta["saliency_scores"]) == len(meta["relevant_clip_ids"]), "adjusting windows saliency error"
+        #assert meta["relevant_windows"][0] / 2 == meta["relevant_clip_ids"][0], "adjusting windows clip id error"
 
         meta["relevant_windows"] = [new_window]
         meta["relevant_clip_ids"] = new_clip_ids
-        meta.pop("duration")
+        #meta.pop("duration")
         return meta
 
 
