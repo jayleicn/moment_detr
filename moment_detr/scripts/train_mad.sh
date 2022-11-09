@@ -33,5 +33,6 @@ PYTHONPATH=$PYTHONPATH:. python moment_detr/train.py \
 --bsz ${bsz} \
 --results_root ${results_root} \
 --num_workers 12 \
+--n_epoch 50 \
 --exp_id ${exp_id} \
 ${@:1}

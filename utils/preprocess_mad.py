@@ -6,7 +6,7 @@ root = '/nfs/data3/goldhofer/mad_dataset'
 mad_transformed_train = []
 mad_transformed_val = []
 
-for mad_path in [ f'{root}/annotations/MAD_val.json',f'{root}/annotations/MAD_train.json']:
+for mad_path in [f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_train.json']:
     train_data = json.load(open(mad_path, 'r'))
     moment_detr_dict = {}
 
@@ -35,6 +35,7 @@ for mad_path in [ f'{root}/annotations/MAD_val.json',f'{root}/annotations/MAD_tr
                                     "saliency_scores": [[0, 0, 0] for i in
                                                         range(int(lowest_clip / 2), int(highest_clip / 2))]}
                 mad_transformed_train.append(moment_detr_dict)
+                assert len(mad_transformed_train[-1]["relevant_windows"][0]) != 0
             else:
                 moment_detr_dict = {"qid": k + "_" + train_data[k]["movie"],
                                     "query": train_data[k]["sentence"],
@@ -46,6 +47,8 @@ for mad_path in [ f'{root}/annotations/MAD_val.json',f'{root}/annotations/MAD_tr
                                     "saliency_scores": [[0, 0, 0] for i in
                                                         range(int(lowest_clip / 2), int(highest_clip / 2))]}
                 mad_transformed_val.append(moment_detr_dict)
+                assert len(mad_transformed_val[-1]["relevant_windows"][0]) != 0
+
         else:
             cnt += 1
     print(f'# Clip duration for {mad_path} probably zero: {cnt}')
