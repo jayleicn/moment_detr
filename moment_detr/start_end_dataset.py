@@ -266,7 +266,7 @@ class StartEndDataset(Dataset):
     def _slice_window(self, frame_features, meta):
         f_max_v_l = self.max_v_l * 5  # qv samples at 0.5FPS, MAD at 5 FPS
 
-        f_relevant_windows = np.multiply(meta["relevant_windows"], 5)  # relevant windows seconds -> frames @ 5 FPS
+        f_relevant_windows = np.multiply(meta["relevant_windows"][0], 5)  # relevant windows seconds -> frames @ 5 FPS
         f_window_length = f_relevant_windows[1] - f_relevant_windows[0]
 
         #assert f_max_v_l > f_window_length, "moment longer then max sample length"
@@ -319,15 +319,15 @@ class StartEndDataset(Dataset):
     def _adjust_meta(self, meta, f_left_offset, f_window_length):
         window_start = int(np.floor(f_left_offset / 5)) if int(np.floor(f_left_offset / 5)) % 2 == 0 else int(
             np.floor(f_left_offset / 5)) - 1
-        new_window = [window_start, int(window_start + f_window_length / 5)]
-        new_clip_ids = [i for i in range(int(new_window[0] / 2), int(new_window[1] / 2))]
+        new_window = [[window_start, int(window_start + f_window_length / 5)]]
+        new_clip_ids = [i for i in range(int(new_window[0][0] / 2), int(new_window[0][1] / 2))]
 
         #assert new_window[1] - new_window[0] == meta["relevant_windows"][1] - meta["relevant_windows"][
         #    0], "adjusting windows error"
         #assert len(meta["saliency_scores"]) == len(meta["relevant_clip_ids"]), "adjusting windows saliency error"
         #assert meta["relevant_windows"][0] / 2 == meta["relevant_clip_ids"][0], "adjusting windows clip id error"
 
-        meta["relevant_windows"] = [new_window]
+        meta["relevant_windows"] = new_window
         meta["relevant_clip_ids"] = new_clip_ids
         #meta.pop("duration")
         return meta

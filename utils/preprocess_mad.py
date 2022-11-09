@@ -11,7 +11,7 @@ for mad_path in [ f'{root}/annotations/MAD_val.json',f'{root}/annotations/MAD_tr
     moment_detr_dict = {}
 
     cnt = 0
-    for k in tqdm(list(train_data.keys())[0:100]):
+    for k in tqdm(list(train_data.keys())):
         lowest_clip = int(np.floor(round(train_data[k]["timestamps"][0])))
         highest_clip = int(np.ceil(round(train_data[k]["timestamps"][1])))
         if lowest_clip % 2 != 0:
@@ -29,7 +29,7 @@ for mad_path in [ f'{root}/annotations/MAD_val.json',f'{root}/annotations/MAD_tr
                                     "query": train_data[k]["sentence"],
                                     "duration": train_data[k]["movie_duration"],
                                     "vid": train_data[k]["movie"],
-                                    "relevant_windows": [lowest_clip, highest_clip],
+                                    "relevant_windows": [[lowest_clip, highest_clip]],
                                     "relevant_clip_ids": [i for i in
                                                           range(int(lowest_clip / 2), int(highest_clip / 2))],
                                     "saliency_scores": [[0, 0, 0] for i in
@@ -40,7 +40,7 @@ for mad_path in [ f'{root}/annotations/MAD_val.json',f'{root}/annotations/MAD_tr
                                     "query": train_data[k]["sentence"],
                                     "duration": train_data[k]["movie_duration"],
                                     "vid": train_data[k]["movie"],
-                                    "relevant_windows": [lowest_clip, highest_clip],
+                                    "relevant_windows": [[lowest_clip, highest_clip]],
                                     "relevant_clip_ids": [i for i in
                                                           range(int(lowest_clip / 2), int(highest_clip / 2))],
                                     "saliency_scores": [[0, 0, 0] for i in
