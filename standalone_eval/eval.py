@@ -116,6 +116,8 @@ def get_data_by_range(submission, ground_truth, len_range):
     ground_truth_in_range = []
     gt_qids_in_range = set()
     for d in ground_truth:
+        if not any(isinstance(i, list) for i in d["relevant_windows"]):
+            d["relevant_windows"] = [d["relevant_windows"]]
         rel_windows_in_range = [
             w for w in d["relevant_windows"] if min_l < get_window_len(w) <= max_l]
         if len(rel_windows_in_range) > 0:

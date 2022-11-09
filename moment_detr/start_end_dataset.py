@@ -211,6 +211,7 @@ class StartEndDataset(Dataset):
 
     def _mad_get_query_feat_by_qid(self, qid):
 
+        qid = qid.split("_")[0]
         self.q_feat_cache = np.array(self.lang_feats[qid]).astype(np.float32)
         self.qid_cache = qid
 
@@ -284,7 +285,7 @@ class StartEndDataset(Dataset):
                  int(f_relevant_windows[0] - f_left_offset):int(f_relevant_windows[1] + f_right_offset),
                  :]
 
-        old_meta = copy.deepcopy(meta)
+        #old_meta = copy.deepcopy(meta)
         meta = self._adjust_meta(meta,
                                  f_left_offset,
                                  f_window_length)
