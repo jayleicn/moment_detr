@@ -7,12 +7,15 @@ import pickle
 
 def run():
     root = '/nfs/data3/goldhofer/mad_dataset'
+    video_features = get_video_feats(root)
+    annotation_paths = [f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_train.json',
+                        f'{root}/annotations/MAD_test.json']
     mad_transformed_train = []
     mad_transformed_val = []
     rng = np.random.default_rng(42)
 
-    for mad_path in [f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_train.json']:
-        train_data = json.load(open(mad_path, 'r'))
+    for annotation_path in annotation_paths:
+        train_data = json.load(open(annotation_path, 'r'))
 
         cnt = 0
         for k in tqdm(list(train_data.keys())):
@@ -27,7 +30,7 @@ def run():
                 highest_clip = int(np.floor(train_data[k]["movie_duration"]))
 
             if highest_clip - lowest_clip > 0:
-                video_feat_cache, meta = _slice_window(video_feat_cache, meta, rng)
+                video_feat_cache, meta = _slice_window(video_features, meta, rng)
 
                 moment_detr_dict = {"qid": k + "_" + train_data[k]["movie"],
                                     "query": train_data[k]["sentence"],
@@ -41,15 +44,19 @@ def run():
 
                 check_dict(moment_detr_dict)
                 if len(moment_detr_dict["saliency_scores"]) != 0:
-                    if "train" in mad_path:
+                    if "train" in annotation_path:
                         mad_transformed_train.append(moment_detr_dict)
                     else:
                         mad_transformed_val.append(moment_detr_dict)
 
             else:
                 cnt += 1
-        print(f'# Clip duration for {mad_path} probably zero: {cnt}')
+        print(f'# Clip duration for {annotation_path} probably zero: {cnt}')
         save(root, mad_transformed_train, mad_transformed_val)
+
+
+def get_video_feats(root):
+    return h5py.File(f'{root}/CLIP_frames_features_5fps.h5', 'r')
 
 
 def check_dict(moment_detr_dict):
