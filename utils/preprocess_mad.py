@@ -1,3 +1,4 @@
+import copy
 import json, os
 import numpy as np
 from tqdm import tqdm
@@ -7,73 +8,81 @@ import pickle
 
 def run():
     root = '/nfs/data3/goldhofer/mad_dataset'
-    video_features = get_video_feats(root)
+    clip_frame_features = get_video_feats(root)
     annotation_paths = [f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_train.json',
                         f'{root}/annotations/MAD_test.json']
-    mad_transformed_train = []
-    mad_transformed_val = []
+
     rng = np.random.default_rng(42)
+    save_path = f'{root}/clip_frame_features_transformed/'
+    qid_tracker = []
 
-    for annotation_path in annotation_paths:
-        train_data = json.load(open(annotation_path, 'r'))
-
+    for annotation_path in tqdm(annotation_paths):
+        annotated_data = json.load(open(annotation_path, 'r'))
+        data_length = len(annotated_data)
+        meta_cache = {}
         cnt = 0
-        for k in tqdm(list(train_data.keys())):
-            lowest_clip = int(np.floor(round(train_data[k]["ext_timestamps"][0])))
-            highest_clip = int(np.ceil(round(train_data[k]["ext_timestamps"][1])))
+        mad_transformed = []
+        for k in tqdm(list(annotated_data.keys())):
+            assert k not in qid_tracker, f'duplicated qid: {k}'
+            qid_tracker.append(k)
+
+            lowest_clip = int(annotated_data[k]["ext_timestamps"][0])
+            highest_clip = int(annotated_data[k]["ext_timestamps"][1])
             if lowest_clip % 2 != 0:
                 lowest_clip -= 1
             if highest_clip % 2 != 0:
                 highest_clip += 1
 
-            if highest_clip > train_data[k]["movie_duration"]:
-                highest_clip = int(np.floor(train_data[k]["movie_duration"]))
+            if highest_clip > annotated_data[k]["movie_duration"]:
+                highest_clip = int(np.floor(annotated_data[k]["movie_duration"]))
 
-            if highest_clip - lowest_clip > 0:
-                video_feat_cache, meta = _slice_window(video_features, meta, rng)
+            if highest_clip > lowest_clip:
 
-                moment_detr_dict = {"qid": k + "_" + train_data[k]["movie"],
-                                    "query": train_data[k]["sentence"],
-                                    "duration": train_data[k]["movie_duration"],
-                                    "vid": train_data[k]["movie"],
-                                    "relevant_windows": [[lowest_clip, highest_clip]],
-                                    "relevant_clip_ids": [i for i in
-                                                          range(int(lowest_clip / 2), int(highest_clip / 2))],
-                                    "saliency_scores": [[0, 0, 0] for i in
-                                                        range(int(lowest_clip / 2), int(highest_clip / 2))]}
+                meta = {"qid": k,
+                        "query": annotated_data[k]["sentence"],
+                        "duration": annotated_data[k]["movie_duration"],
+                        "vid": annotated_data[k]["movie"],
+                        "relevant_windows": [[lowest_clip, highest_clip]],
+                        "relevant_clip_ids": [i for i in
+                                              range(int(lowest_clip / 2), int(highest_clip / 2))],
+                        "saliency_scores": [[0, 0, 0] for _ in
+                                            range(int(lowest_clip / 2), int(highest_clip / 2))]}
 
-                check_dict(moment_detr_dict)
-                if len(moment_detr_dict["saliency_scores"]) != 0:
-                    if "train" in annotation_path:
-                        mad_transformed_train.append(moment_detr_dict)
-                    else:
-                        mad_transformed_val.append(moment_detr_dict)
+                old_meta = copy.deepcopy(meta)
+                sliced_frame_features, meta = _slice_window(clip_frame_features[annotated_data[k]["movie"]], meta, rng)
+                meta_cache = _log_meta(old_meta, meta, meta_cache, data_length, root, annotation_path)
 
-            else:
-                cnt += 1
+                if check_dict(meta):
+                    mad_transformed.append(meta)
+                    np.savez(f'{save_path}{k}.npz', features=sliced_frame_features)
+
+        save(annotation_path, root, mad_transformed)
+
         print(f'# Clip duration for {annotation_path} probably zero: {cnt}')
-        save(root, mad_transformed_train, mad_transformed_val)
 
 
 def get_video_feats(root):
     return h5py.File(f'{root}/CLIP_frames_features_5fps.h5', 'r')
 
 
-def check_dict(moment_detr_dict):
-    assert len(moment_detr_dict["relevant_windows"][0]) != 0
-    assert len(moment_detr_dict["saliency_scores"]) != 0, "saliency scores are zero"
-    assert moment_detr_dict["relevant_windows"][0][0] < moment_detr_dict["relevant_windows"][0][1]
-    assert 0 <= moment_detr_dict["relevant_windows"][0][0] < moment_detr_dict["relevant_windows"][0][
-        1], f'relevant window: {moment_detr_dict["relevant_windows"][0]}'
+def check_dict(meta):
+    try:
+        assert len(meta["relevant_windows"][0]) != 0
+        assert len(meta["saliency_scores"]) != 0, "saliency scores are zero"
+        assert meta["relevant_windows"][0][0] < meta["relevant_windows"][0][1]
+        assert 0 <= meta["relevant_windows"][0][0] < meta["relevant_windows"][0][
+            1], f'relevant window: {meta["relevant_windows"][0]}'
+        return True
+    except Exception as e:
+        print(e)
+        return False
 
 
-def save(root, mad_transformed_train, mad_transformed_val):
-    with open(f'{root}/annotations/MAD_train_transformed.json', "w") as f:
-        f.write("\n".join([json.dumps(e) for e in mad_transformed_train]))
-    with open(f'{root}/annotations/MAD_val_transformed.json', "w") as f:
-        f.write("\n".join([json.dumps(e) for e in mad_transformed_val]))
-
-    print(f'length train: {len(mad_transformed_train)}, length val: {len(mad_transformed_val)}')
+def save(annotation_path, root, mad_transformed):
+    save_path = root + "/" + annotation_path.split("/")[-1].split(".")[0] + "_transformed.json"
+    with open(save_path, "w") as f:
+        f.write("\n".join([json.dumps(e) for e in mad_transformed]))
+    print(f'saved to: {save_path}')
 
 
 def _slice_window(frame_features, meta, rng):
@@ -99,11 +108,9 @@ def _slice_window(frame_features, meta, rng):
              int(f_relevant_windows[0] - f_left_offset):int(f_relevant_windows[1] + f_right_offset),
              :]
 
-    # old_meta = copy.deepcopy(meta)
     meta = _adjust_meta(meta,
                         f_left_offset,
                         f_window_length)
-    # self._log_meta(old_meta, meta)
     window = rng.choice(window, size=max_v_l, replace=False, axis=0, shuffle=False)
     return window, meta
 
@@ -119,13 +126,13 @@ def _check_offsets(f_right_offset, f_left_offset, f_relevant_windows, f_max_v_l,
     return f_right_offset, f_left_offset
 
 
-def _log_meta(old_meta, new_meta):
-    meta_log[old_meta["qid"]] = {"old_meta": old_meta, "new_meta": new_meta}
-    if len(meta_log) % 100 == 0:
-        print(f'saving meta log with length: {len(meta_log)}')
-        with open('data/meta_log.pkl', 'wb') as f:
-            pickle.dump(meta_log, f)
-    return
+def _log_meta(old_meta, new_meta, meta_cache, data_length, root, annotation_path):
+    meta_cache[old_meta["qid"]] = {"old_meta": old_meta, "new_meta": new_meta}
+    if len(meta_cache) == data_length:
+        print(f'saving meta log with length: {len(meta_cache)}')
+        with open(f'{root}/{annotation_path.split("/")[-1].split(".")[0]}_meta_log.pkl', 'wb') as f:
+            pickle.dump(meta_cache, f)
+    return meta_cache
 
 
 def _adjust_meta(meta, f_left_offset, f_window_length):
