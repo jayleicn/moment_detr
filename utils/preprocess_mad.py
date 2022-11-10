@@ -9,8 +9,8 @@ import pickle
 def run():
     root = '/nfs/data3/goldhofer/mad_dataset'
     clip_frame_features = get_video_feats(root)
-    annotation_paths = [f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_train.json',
-                        f'{root}/annotations/MAD_test.json']
+    annotation_paths = [f'{root}/annotations/MAD_test.json', f'{root}/annotations/MAD_train.json',
+                        f'{root}/annotations/MAD_val.json']
 
     rng = np.random.default_rng(42)
     save_path = f'{root}/clip_frame_features_transformed/'
@@ -23,38 +23,41 @@ def run():
         cnt = 0
         mad_transformed = []
         for k in tqdm(list(annotated_data.keys())):
-            assert k not in qid_tracker, f'duplicated qid: {k}'
-            qid_tracker.append(k)
+            try:
+                assert k not in qid_tracker, f'duplicated qid: {k}'
+                qid_tracker.append(k)
 
-            lowest_clip = int(annotated_data[k]["ext_timestamps"][0])
-            highest_clip = int(annotated_data[k]["ext_timestamps"][1])
-            if lowest_clip % 2 != 0:
-                lowest_clip -= 1
-            if highest_clip % 2 != 0:
-                highest_clip += 1
+                lowest_clip = int(annotated_data[k]["ext_timestamps"][0])
+                highest_clip = int(annotated_data[k]["ext_timestamps"][1])
+                if lowest_clip % 2 != 0:
+                    lowest_clip -= 1
+                if highest_clip % 2 != 0:
+                    highest_clip += 1
 
-            if highest_clip > annotated_data[k]["movie_duration"]:
-                highest_clip = int(np.floor(annotated_data[k]["movie_duration"]))
+                if highest_clip > annotated_data[k]["movie_duration"]:
+                    highest_clip = int(np.floor(annotated_data[k]["movie_duration"]))
 
-            if highest_clip > lowest_clip:
+                if highest_clip > lowest_clip:
 
-                meta = {"qid": k,
-                        "query": annotated_data[k]["sentence"],
-                        "duration": annotated_data[k]["movie_duration"],
-                        "vid": annotated_data[k]["movie"],
-                        "relevant_windows": [[lowest_clip, highest_clip]],
-                        "relevant_clip_ids": [i for i in
-                                              range(int(lowest_clip / 2), int(highest_clip / 2))],
-                        "saliency_scores": [[0, 0, 0] for _ in
-                                            range(int(lowest_clip / 2), int(highest_clip / 2))]}
+                    meta = {"qid": k,
+                            "query": annotated_data[k]["sentence"],
+                            "duration": annotated_data[k]["movie_duration"],
+                            "vid": annotated_data[k]["movie"],
+                            "relevant_windows": [[lowest_clip, highest_clip]],
+                            "relevant_clip_ids": [i for i in
+                                                  range(int(lowest_clip / 2), int(highest_clip / 2))],
+                            "saliency_scores": [[0, 0, 0] for _ in
+                                                range(int(lowest_clip / 2), int(highest_clip / 2))]}
 
-                old_meta = copy.deepcopy(meta)
-                sliced_frame_features, meta = _slice_window(clip_frame_features[annotated_data[k]["movie"]], meta, rng)
-                meta_cache = _log_meta(old_meta, meta, meta_cache, data_length, root, annotation_path)
+                    old_meta = copy.deepcopy(meta)
+                    sliced_frame_features, meta = _slice_window(clip_frame_features[annotated_data[k]["movie"]], meta, rng)
+                    meta_cache = _log_meta(old_meta, meta, meta_cache, data_length, root, annotation_path)
 
-                if check_dict(meta):
-                    mad_transformed.append(meta)
-                    np.savez(f'{save_path}{k}.npz', features=sliced_frame_features)
+                    if check_dict(meta):
+                        mad_transformed.append(meta)
+                        np.savez(f'{save_path}{k}.npz', features=sliced_frame_features)
+            except Exception as e:
+                print(e)
 
         save(annotation_path, root, mad_transformed)
 
