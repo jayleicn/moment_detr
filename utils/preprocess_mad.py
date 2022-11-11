@@ -9,10 +9,10 @@ import pickle
 def run():
     root = '/nfs/data3/goldhofer/mad_dataset'
     clip_frame_features = get_video_feats(root)
-    #annotation_paths = [f'{root}/annotations/MAD_test.json', f'{root}/annotations/MAD_train.json',
-    #                    f'{root}/annotations/MAD_val.json']
+    annotation_paths = [f'{root}/annotations/MAD_test.json',
+                        f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_train.json']
 
-    annotation_paths = [f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_test.json']
+    # annotation_paths = [f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_test.json']
 
     rng = np.random.default_rng(42)
     save_path = f'{root}/clip_frame_features_transformed_2/'
@@ -37,6 +37,7 @@ def run():
                     highest_clip += 1
 
                 if highest_clip > annotated_data[k]["movie_duration"]:
+                    print(f'highest clip higher than movie duration, adjusted from {highest_clip} to {int(np.floor(annotated_data[k]["movie_duration"]))}')
                     highest_clip = int(np.floor(annotated_data[k]["movie_duration"]))
 
                 if highest_clip > lowest_clip:
@@ -56,12 +57,11 @@ def run():
                                                                rng)
                     meta_cache = log_meta(old_meta, meta, meta_cache, data_length)
 
-                    if check_dict(meta):
+                    if check_dict(meta,annotated_data[k]):
                         mad_transformed.append(meta)
                         np.savez(f'{save_path}{k}.npz', features=sliced_frame_features)
             except Exception as e:
                 print(f'Exception:\n{e}')
-                print(f'Original Data:\n{annotated_data[k]}')
 
         save_annotations(annotation_path, root, mad_transformed)
         save_meta(meta_cache, root, annotation_path)
@@ -72,13 +72,13 @@ def get_video_feats(root):
     return h5py.File(f'{root}/CLIP_frames_features_5fps.h5', 'r')
 
 
-def check_dict(meta):
+def check_dict(meta, annotated_data):
     try:
         assert len(meta["relevant_windows"][0]) != 0
         assert len(meta["saliency_scores"]) != 0, "saliency scores are zero"
         assert meta["relevant_windows"][0][0] < meta["relevant_windows"][0][1]
         assert 0 <= meta["relevant_windows"][0][0] < meta["relevant_windows"][0][
-            1], f'relevant window: {meta["relevant_windows"][0]}'
+            1], f'relevant window: {meta["relevant_windows"][0]}\noriginal data:\n{annotated_data}'
         return True
     except Exception as e:
         print(e)
@@ -95,13 +95,14 @@ def save_annotations(annotation_path, root, mad_transformed):
 def slice_window(frame_features, meta, rng):
     max_v_l = 75
     f_max_v_l = max_v_l * 5  # qv samples at 0.5FPS, MAD at 5 FPS
-    #TODO set f_max_v_l = max_v_l * 10
+    # TODO set f_max_v_l = max_v_l * 10
     f_relevant_windows = np.multiply(meta["relevant_windows"][0], 5)  # relevant windows seconds -> frames @ 5 FPS
     f_window_length = f_relevant_windows[1] - f_relevant_windows[0]
 
     # assert f_max_v_l > f_window_length, "moment longer then max sample length"
 
     random_window_offset = rng.random()
+    assert f_max_v_l > f_window_length, f"window length ({f_window_length}) longer than max ({f_max_v_l}), discarding datapoint"
     f_left_offset = int(np.floor(random_window_offset * (f_max_v_l - f_window_length)))
     f_right_offset = int(f_max_v_l - f_window_length - f_left_offset)
 

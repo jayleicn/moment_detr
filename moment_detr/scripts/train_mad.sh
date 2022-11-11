@@ -1,4 +1,3 @@
-cd ../../
 dset_name=hl
 ctx_mode=video_tef
 v_feat_types=clip
@@ -12,12 +11,12 @@ eval_path=/nfs/data3/goldhofer/mad_dataset/annotations/MAD_val_transformed.json
 eval_split_name=val
 
 ######## setup video+text features
-v_feat_dirs=(/nfs/data3/goldhofer/mad_dataset/)
+v_feat_dirs=(/nfs/data3/goldhofer/mad_dataset/clip_frame_features_transformed_2/)
 v_feat_dim=512
 t_feat_dir=/nfs/data3/goldhofer/mad_dataset/
 t_feat_dim=512
 #### training
-bsz=32
+bsz=256
 
 
 PYTHONPATH=$PYTHONPATH:. python moment_detr/train.py \
@@ -32,7 +31,7 @@ PYTHONPATH=$PYTHONPATH:. python moment_detr/train.py \
 --t_feat_dim ${t_feat_dim} \
 --bsz ${bsz} \
 --results_root ${results_root} \
---num_workers 12 \
---n_epoch 50 \
+--num_workers 16 \
+--n_epoch 200 \
 --exp_id ${exp_id} \
 ${@:1}
