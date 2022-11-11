@@ -90,11 +90,10 @@ class StartEndDataset(Dataset):
         else:
             model_inputs["query_feat"] = self._get_query_feat_by_qid(meta["qid"])  # (Dq, ) or (Lq, Dq)
         if self.use_video:
-            if "mad_dataset" in self.data_path:
-                model_inputs["video_feat"], meta = self._mad_get_video_feat_by_vid(meta["vid"],
-                                                                                   meta)  # (Lv, Dv)
-            else:
-                model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
+            #if "mad_dataset" in self.data_path:
+            #    model_inputs["video_feat"], meta = self._mad_get_video_feat_by_vid(meta["vid"],
+            #                                                                       meta)  # (Lv, Dv)
+            model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
 
             ctx_l = len(model_inputs["video_feat"])
         else:
