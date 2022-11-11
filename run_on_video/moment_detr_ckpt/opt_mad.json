@@ -25,14 +25,14 @@
     "max_v_l": 75,
     "clip_length": 2,
     "max_windows": 5,
-    "train_path": "data/highlight_train_release.jsonl",
-    "eval_path": "data/highlight_val_release.jsonl",
+    "train_path": "/nfs/data3/goldhofer/mad_dataset/annotations/MAD_train_transformed.json",
+    "eval_path": "/nfs/data3/goldhofer/mad_dataset/annotations/MAD_val_transformed.json",
     "no_norm_vfeat": false,
     "no_norm_tfeat": false,
     "v_feat_dirs": [
-        "/nfs/data3/goldhofer/momentDETR/features/clip_features"
+        "/nfs/data3/goldhofer/mad_dataset/clip_frame_features_transformed_2"
     ],
-    "t_feat_dir": "/nfs/data3/goldhofer/momentDETR/features/clip_text_features/",
+    "t_feat_dir": "/nfs/data3/goldhofer/mad_dataset/",
     "v_feat_dim": 512,
     "t_feat_dim": 512,
     "ctx_mode": "video_tef",

@@ -210,7 +210,7 @@ def setup_model(opt):
             optimizer.load_state_dict(checkpoint['optimizer'])
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             opt.start_epoch = checkpoint['epoch'] + 1
-        logger.info(f"Loaded model saved at epoch {checkpoint['epoch']} from checkpoint: {opt.resume}")
+        #logger.info(f"Loaded model saved at epoch {checkpoint['epoch']} from checkpoint: {opt.resume}")
     else:
         logger.warning("If you intend to evaluate the model, please specify --resume with ckpt path")
 
