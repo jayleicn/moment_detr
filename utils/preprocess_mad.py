@@ -60,7 +60,8 @@ def run():
                         mad_transformed.append(meta)
                         np.savez(f'{save_path}{k}.npz', features=sliced_frame_features)
             except Exception as e:
-                print(e)
+                print(f'Exception:\n{e}')
+                print(f'Original Data:\n{annotated_data[k]}')
 
         save_annotations(annotation_path, root, mad_transformed)
         save_meta(meta_cache, root, annotation_path)
