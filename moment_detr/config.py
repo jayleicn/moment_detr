@@ -7,7 +7,7 @@ from utils.basic_utils import mkdirp, load_json, save_json, make_zipfile, dict_t
 
 
 class BaseOptions(object):
-    saved_option_filename = "opt.json"
+    #saved_option_filename = "opt.json"
     ckpt_filename = "model.ckpt"
     tensorboard_log_dir = "tensorboard_log"
     train_log_filename = "train.log.txt"
@@ -142,7 +142,15 @@ class BaseOptions(object):
                                  "(or non-minimum suppression for distance)"
                                  "to post-processing the predictions. "
                                  "-1: do not use nms. [0, 1]")
+        #long_nlq
+        parser.add_argument('--sampling_fps', default=0.5, type=float, help="dataloader sampling fps")
+        parser.add_argument("--saved_option_filename", type=str, default="opt_mad.json")
+        parser.add_argument("--cuda_visible_devices", nargs="*", type=int, default=None,
+                            help="list of cuda visible devices")
+        parser.add_argument("--eval_results_dir", type=str, default=None,
+                                 help="dir to save results, if not set, fall back to training results_dir")
         self.parser = parser
+
 
     def display_save(self, opt):
         args = vars(opt)
@@ -150,7 +158,7 @@ class BaseOptions(object):
         print(dict_to_markdown(vars(opt), max_str_len=120))
         # Save settings
         if not isinstance(self, TestOptions):
-            option_file_path = os.path.join(opt.results_dir, self.saved_option_filename)  # not yaml file indeed
+            option_file_path = os.path.join(opt.results_dir, opt.saved_option_filename)  # not yaml file indeed
             save_json(args, option_file_path, save_pretty=True)
 
     def parse(self):
@@ -166,7 +174,7 @@ class BaseOptions(object):
             # modify model_dir to absolute path
             # opt.model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", opt.model_dir)
             opt.model_dir = os.path.dirname(opt.resume)
-            saved_options = load_json(os.path.join(opt.model_dir, self.saved_option_filename))
+            saved_options = load_json(os.path.join(opt.model_dir, opt.saved_option_filename))
             for arg in saved_options:  # use saved options to overwrite all BaseOptions args.
                 if arg not in ["results_root", "num_workers", "nms_thd", "debug",  # "max_before_nms", "max_after_nms"
                                "max_pred_l", "min_pred_l",
@@ -180,9 +188,9 @@ class BaseOptions(object):
                 raise ValueError("--exp_id is required for at a training option!")
 
             ctx_str = opt.ctx_mode + "_sub" if any(["sub_ctx" in p for p in opt.v_feat_dirs]) else opt.ctx_mode
-            opt.results_dir = os.path.join(opt.results_root,
-                                           "-".join([opt.dset_name, ctx_str, opt.exp_id,
-                                                     time.strftime("%Y_%m_%d_%H_%M_%S")]))
+            opt.results_dir = os.path.join(opt.results_root, opt.eval_results_dir)
+                                          # "-".join([opt.dset_name, ctx_str, opt.exp_id,
+                                                 #    time.strftime("%Y_%m_%d_%H_%M_%S")]))
             mkdirp(opt.results_dir)
             # save a copy of current code
             code_dir = os.path.dirname(os.path.realpath(__file__))
@@ -220,7 +228,7 @@ class TestOptions(BaseOptions):
         BaseOptions.initialize(self)
         # also need to specify --eval_split_name
         self.parser.add_argument("--eval_id", type=str, help="evaluation id")
-        self.parser.add_argument("--eval_results_dir", type=str, default=None,
-                                 help="dir to save results, if not set, fall back to training results_dir")
+        #self.parser.add_argument("--eval_results_dir", type=str, default=None,
+                                 #help="dir to save results, if not set, fall back to training results_dir")
         self.parser.add_argument("--model_dir", type=str,
                                  help="dir contains the model file, will be converted to absolute path afterwards")

@@ -9,17 +9,18 @@ exp_id=exp
 
 ######## data paths
 train_path=/nfs/data3/goldhofer/mad_dataset/annotations/MAD_train_transformed.json
-eval_path=/nfs/data3/goldhofer/mad_dataset/annotations/MAD_val_transformed.json
-eval_split_name=val
+eval_path=/nfs/data3/goldhofer/mad_dataset/annotations/MAD_test_transformed.json
+eval_split_name=test
 
 ######## setup video+text features
-v_feat_dirs=(/nfs/data3/goldhofer/mad_dataset/clip_frame_features_transformed_2/)
+v_feat_dirs=(/nfs/data3/goldhofer/mad_dataset/clip_frame_features_transformed_dense/)
 v_feat_dim=512
 t_feat_dir=/nfs/data3/goldhofer/mad_dataset/
 t_feat_dim=512
 bsz=256
 device=1
 eval_results_dir=tmp/
+sampling_fps=0.5
 
 PYTHONPATH=$PYTHONPATH:. python moment_detr/inference.py \
 --dset_name ${dset_name} \
@@ -38,5 +39,6 @@ PYTHONPATH=$PYTHONPATH:. python moment_detr/inference.py \
 --exp_id ${exp_id} \
 --resume ${ckpt_path} \
 --device ${device} \
---eval_results_dir ${eval_results_dir}
+--eval_results_dir ${eval_results_dir} \
+--sampling_fps ${sampling_fps}
 ${@:1}

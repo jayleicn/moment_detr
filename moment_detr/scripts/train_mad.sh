@@ -11,12 +11,14 @@ eval_path=/nfs/data3/goldhofer/mad_dataset/annotations/MAD_val_transformed.json
 eval_split_name=val
 
 ######## setup video+text features
-v_feat_dirs=(/nfs/data3/goldhofer/mad_dataset/clip_frame_features_transformed_2/)
-v_feat_dim=512
+v_feat_dirs=(/nfs/data3/goldhofer/mad_dataset/clip_frame_features_transformed_dense/)
+v_feat_dim=768
 t_feat_dir=/nfs/data3/goldhofer/mad_dataset/
 t_feat_dim=512
 #### training
-bsz=256
+bsz=32
+cuda_visible_devices=2
+eval_results_dir=L14_.5FPS
 
 
 PYTHONPATH=$PYTHONPATH:. python moment_detr/train.py \
@@ -34,4 +36,6 @@ PYTHONPATH=$PYTHONPATH:. python moment_detr/train.py \
 --num_workers 16 \
 --n_epoch 200 \
 --exp_id ${exp_id} \
+--cuda_visible_devices ${cuda_visible_devices} \
+--eval_results_dir ${eval_results_dir} \
 ${@:1}

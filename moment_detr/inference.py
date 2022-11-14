@@ -240,7 +240,8 @@ def start_inference():
         max_windows=opt.max_windows,
         load_labels=True,  # opt.eval_split_name == "val",
         span_loss_type=opt.span_loss_type,
-        txt_drop_ratio=0
+        txt_drop_ratio=0,
+        sampling_fps=opt.sampling_fps
     )
 
     model, criterion, _, _ = setup_model(opt)

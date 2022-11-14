@@ -4,19 +4,23 @@ import numpy as np
 from tqdm import tqdm
 import h5py
 import pickle
-
+from pathlib import Path
 
 def run():
     root = '/nfs/data3/goldhofer/mad_dataset'
     clip_frame_features = get_video_feats(root)
-    annotation_paths = [f'{root}/annotations/MAD_test.json',
-                        f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_train.json']
+    annotation_paths = [f'{root}/annotations/MAD_val.json',
+                        f'{root}/annotations/MAD_test.json', f'{root}/annotations/MAD_train.json']
 
     # annotation_paths = [f'{root}/annotations/MAD_val.json', f'{root}/annotations/MAD_test.json']
 
     rng = np.random.default_rng(42)
-    save_path = f'{root}/clip_frame_features_transformed_2/'
+    save_path = f'{root}/clip_frame_features_transformed_dense/'
+    Path(save_path).mkdir(parents=True, exist_ok=True)
     id_tracker = []
+
+    fps = 5
+    video_length_seconds = 150
 
     for annotation_path in tqdm(annotation_paths):
         annotated_data = json.load(open(annotation_path, 'r'))
@@ -31,13 +35,18 @@ def run():
 
                 lowest_clip = int(annotated_data[k]["ext_timestamps"][0])
                 highest_clip = int(annotated_data[k]["ext_timestamps"][1])
+
                 if lowest_clip % 2 != 0:
-                    lowest_clip -= 1
+                   lowest_clip -= 1
                 if highest_clip % 2 != 0:
                     highest_clip += 1
+                # lowest_clip2, highest_clip2 = math.floor(annotated_data[k]["ext_timestamps"][0] / 2.) * 2, \
+                #                             math.ceil(annotated_data[k]["ext_timestamps"][1] / 2.) * 2
+
 
                 if highest_clip > annotated_data[k]["movie_duration"]:
-                    print(f'highest clip higher than movie duration, adjusted from {highest_clip} to {int(np.floor(annotated_data[k]["movie_duration"]))}')
+                    print(
+                        f'highest clip higher than movie duration, adjusted from {highest_clip} to {int(np.floor(annotated_data[k]["movie_duration"]))}')
                     highest_clip = int(np.floor(annotated_data[k]["movie_duration"]))
 
                 if highest_clip > lowest_clip:
@@ -47,6 +56,7 @@ def run():
                             "duration": annotated_data[k]["movie_duration"],
                             "vid": k,
                             "relevant_windows": [[lowest_clip, highest_clip]],
+                            #TODO: may not need these 2
                             "relevant_clip_ids": [i for i in
                                                   range(int(lowest_clip / 2), int(highest_clip / 2))],
                             "saliency_scores": [[0, 0, 0] for _ in
@@ -54,10 +64,10 @@ def run():
 
                     old_meta = copy.deepcopy(meta)
                     sliced_frame_features, meta = slice_window(clip_frame_features[annotated_data[k]["movie"]], meta,
-                                                               rng)
-                    meta_cache = log_meta(old_meta, meta, meta_cache, data_length)
+                                                               rng, fps, video_length_seconds)
+                    meta_cache = log_meta(old_meta, meta, annotated_data[k], meta_cache)
 
-                    if check_dict(meta,annotated_data[k]):
+                    if check_dict(meta, annotated_data[k]):
                         mad_transformed.append(meta)
                         np.savez(f'{save_path}{k}.npz', features=sliced_frame_features)
             except Exception as e:
@@ -69,7 +79,7 @@ def run():
 
 
 def get_video_feats(root):
-    return h5py.File(f'{root}/CLIP_frames_features_5fps.h5', 'r')
+    return h5py.File(f'{root}/CLIP_L14_frames_features_5fps.h5', 'r')
 
 
 def check_dict(meta, annotated_data):
@@ -92,11 +102,9 @@ def save_annotations(annotation_path, root, mad_transformed):
     print(f'saved to: {save_path}')
 
 
-def slice_window(frame_features, meta, rng):
-    max_v_l = 75
-    f_max_v_l = max_v_l * 5  # qv samples at 0.5FPS, MAD at 5 FPS
-    # TODO set f_max_v_l = max_v_l * 10
-    f_relevant_windows = np.multiply(meta["relevant_windows"][0], 5)  # relevant windows seconds -> frames @ 5 FPS
+def slice_window(frame_features, meta, rng, fps, max_v_l):
+    f_max_v_l = max_v_l * fps  # qv samples at 0.5FPS, MAD at 5 FPS
+    f_relevant_windows = np.multiply(meta["relevant_windows"][0], fps)  # relevant windows seconds -> frames @ 5 FPS
     f_window_length = f_relevant_windows[1] - f_relevant_windows[0]
 
     # assert f_max_v_l > f_window_length, "moment longer then max sample length"
@@ -118,8 +126,9 @@ def slice_window(frame_features, meta, rng):
 
     meta = adjust_meta(meta,
                        f_left_offset,
-                       f_window_length)
-    window = rng.choice(window, size=max_v_l, replace=False, axis=0, shuffle=False)
+                       f_window_length,
+                       fps)
+    # window = rng.choice(window, size=max_v_l, replace=False, axis=0, shuffle=False) #TODO: check random
     return window, meta
 
 
@@ -134,8 +143,8 @@ def check_offsets(f_right_offset, f_left_offset, f_relevant_windows, f_max_v_l, 
     return f_right_offset, f_left_offset
 
 
-def log_meta(old_meta, new_meta, meta_cache, data_length, ):
-    meta_cache[old_meta["qid"]] = {"old_meta": old_meta, "new_meta": new_meta}
+def log_meta(old_meta, new_meta, annotated_data, meta_cache):
+    meta_cache[old_meta["qid"]] = {"old_meta": old_meta, "new_meta": new_meta, "annotation": annotated_data}
     return meta_cache
 
 
@@ -146,10 +155,10 @@ def save_meta(meta_cache, root, annotation_path):
     print(f'saved metadata cache to: {root}/{annotation_path.split("/")[-1].split(".")[0]}_meta_log.pkl')
 
 
-def adjust_meta(meta, f_left_offset, f_window_length):
-    window_start = int(np.floor(f_left_offset / 5)) if int(np.floor(f_left_offset / 5)) % 2 == 0 else int(
-        np.floor(f_left_offset / 5)) - 1
-    new_window = [[window_start, int(window_start + f_window_length / 5)]]
+def adjust_meta(meta, f_left_offset, f_window_length, fps):
+    window_start = int(np.floor(f_left_offset / fps)) if int(np.floor(f_left_offset / fps)) % 2 == 0 else int(
+        np.floor(f_left_offset / fps)) - 1
+    new_window = [[window_start, int(window_start + f_window_length / fps)]]
     new_clip_ids = [i for i in range(int(new_window[0][0] / 2), int(new_window[0][1] / 2))]
 
     meta["relevant_windows"] = new_window

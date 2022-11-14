@@ -32,7 +32,7 @@ class StartEndDataset(Dataset):
                  q_feat_type="last_hidden_state",
                  max_q_l=32, max_v_l=75, data_ratio=1.0, ctx_mode="video",
                  normalize_v=True, normalize_t=True, load_labels=True,
-                 clip_len=2, max_windows=5, span_loss_type="l1", txt_drop_ratio=0):
+                 clip_len=2, max_windows=5, span_loss_type="l1", txt_drop_ratio=0,sampling_fps=0.5):
         self.dset_name = dset_name
         self.data_path = data_path
         self.data_ratio = data_ratio
@@ -59,6 +59,7 @@ class StartEndDataset(Dataset):
         self.q_feat_cache = None
         self.qid_cache = None
         self.rng = np.random.default_rng(42)
+        self.sampling_fps=sampling_fps
         self.meta_log = {}
         if "val" in data_path or "test" in data_path:
             assert txt_drop_ratio == 0
@@ -93,7 +94,7 @@ class StartEndDataset(Dataset):
             #if "mad_dataset" in self.data_path:
             #    model_inputs["video_feat"], meta = self._mad_get_video_feat_by_vid(meta["vid"],
             #                                                                       meta)  # (Lv, Dv)
-            model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"])  # (Lv, Dv)
+            model_inputs["video_feat"] = self._get_video_feat_by_vid(meta["vid"], self.sampling_fps)  # (Lv, Dv)
 
             ctx_l = len(model_inputs["video_feat"])
         else:
@@ -203,10 +204,10 @@ class StartEndDataset(Dataset):
         return torch.from_numpy(q_feat)  # (D, ) or (Lq, D)
 
     def get_video_feats(self):
-        return h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_frames_features_5fps.h5', 'r')
+        return h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_B32_frames_features_5fps.h5', 'r')
 
     def get_lang_feats(self):
-        return h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_language_token_features.h5', 'r')
+        return h5py.File(f'/nfs/data3/goldhofer/mad_dataset/CLIP_B32_language_tokens_features.h5', 'r')
 
     def _mad_get_query_feat_by_qid(self, qid):
 
@@ -237,11 +238,15 @@ class StartEndDataset(Dataset):
             embeddings[row_indices] = 0
         return embeddings
 
-    def _get_video_feat_by_vid(self, vid):
+    def _get_video_feat_by_vid(self, vid, sampling_fps=0.5, train=False):
         v_feat_list = []
         for _feat_dir in self.v_feat_dirs:
             _feat_path = join(_feat_dir, f"{vid}.npz")
-            _feat = np.load(_feat_path)["features"][:self.max_v_l].astype(np.float32)
+            #_feat_path = '/nfs/data3/goldhofer/mad_dataset/clip_frame_features_transformed_dense/0.npz'
+            if train:
+                _feat = np.load(_feat_path)["features"][:self.max_v_l].astype(np.float32)
+            else:
+                _feat = np.load(_feat_path)["features"][::int(5 / sampling_fps)].astype(np.float32)
             if self.normalize_v:
                 _feat = l2_normalize_np_array(_feat)
             v_feat_list.append(_feat)

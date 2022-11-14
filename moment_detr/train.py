@@ -128,7 +128,7 @@ def train(model, criterion, optimizer, lr_scheduler, train_dataset, val_dataset,
         if epoch_i > -1:
             train_epoch(model, criterion, train_loader, optimizer, opt, epoch_i, tb_writer)
             lr_scheduler.step()
-        eval_epoch_interval = 5
+        eval_epoch_interval = 1 #if opt.debug else 5
         if opt.eval_path is not None and (epoch_i + 1) % eval_epoch_interval == 0:
             with torch.no_grad():
                 metrics_no_nms, metrics_nms, eval_loss_meters, latest_file_paths = \
@@ -207,6 +207,10 @@ def start_training():
     logger.info("Setup config, data and model...")
     opt = BaseOptions().parse()
     set_seed(opt.seed)
+
+    if opt.cuda_visible_devices is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, opt.cuda_visible_devices))
+
     if opt.debug:  # keep the model run deterministically
         # 'cudnn.benchmark = True' enabled auto finding the best algorithm for a specific input/net config.
         # Enable this only when input size is fixed.
@@ -228,7 +232,8 @@ def start_training():
         clip_len=opt.clip_length,
         max_windows=opt.max_windows,
         span_loss_type=opt.span_loss_type,
-        txt_drop_ratio=opt.txt_drop_ratio
+        txt_drop_ratio=opt.txt_drop_ratio,
+        sampling_fps=opt.sampling_fps
     )
 
     dataset_config["data_path"] = opt.train_path

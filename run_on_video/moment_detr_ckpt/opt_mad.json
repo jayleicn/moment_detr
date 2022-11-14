@@ -1,6 +1,6 @@
 {
     "dset_name": "hl",
-    "eval_split_name": "val",
+    "eval_split_name": "test",
     "debug": false,
     "data_ratio": 1.0,
     "results_root": "baselines/detr/results",
@@ -26,7 +26,7 @@
     "clip_length": 2,
     "max_windows": 5,
     "train_path": "/nfs/data3/goldhofer/mad_dataset/annotations/MAD_train_transformed.json",
-    "eval_path": "/nfs/data3/goldhofer/mad_dataset/annotations/MAD_val_transformed.json",
+    "eval_path": "/nfs/data3/goldhofer/mad_dataset/annotations/MAD_test_transformed.json",
     "no_norm_vfeat": false,
     "no_norm_tfeat": false,
     "v_feat_dirs": [
