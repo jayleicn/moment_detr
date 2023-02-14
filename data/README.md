@@ -1,5 +1,7 @@
 ## QVHighlights Dataset
 
+All raw video data can be downloaded from this [link](https://nlp.cs.unc.edu/data/jielei/qvh/qvhilights_videos.tar.gz).
+
 Our annotation files include 3 splits: `train`, `val` and `test`. Each file is in [JSON Line](https://jsonlines.org/) format, each row of the files can be loaded as a single `dict` in Python. Below is an example of the annotation:
 
 ```
