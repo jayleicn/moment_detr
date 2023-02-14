@@ -44,7 +44,8 @@ extract it under project root directory:
 ```
 tar -xf path/to/moment_detr_features.tar.gz
 ```
-The features are extracted using Linjie's [HERO_Video_Feature_Extractor](https://github.com/linjieli222/HERO_Video_Feature_Extractor).
+The features are extracted using Linjie's [HERO_Video_Feature_Extractor](https://github.com/linjieli222/HERO_Video_Feature_Extractor). 
+If you want to use your own choices of video features, please download the raw videos from this [link](https://nlp.cs.unc.edu/data/jielei/qvh/qvhilights_videos.tar.gz).
 
 2. Install dependencies.
 
