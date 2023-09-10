@@ -55,7 +55,7 @@ We recommend creating conda environment and installing all the dependencies as f
 # create conda env
 conda create --name moment_detr python=3.7
 # activate env
-conda actiavte moment_detr
+conda activate moment_detr
 # install pytorch with CUDA 11.0
 conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch
 # install other python packages
@@ -107,7 +107,7 @@ such as annotation and feature paths. Now you are ready to use this script for t
 
 ## Run predictions on your own videos and queries
 You may also want to run Moment-DETR model on your own videos and queries. 
-First you need to add a few libraries for feature extraction to your environment. Before this, you should have already installed PyTorch and other libraries for running Moment-DETR following instuctions in previous sections.
+First you need to add a few libraries for feature extraction to your environment. Before this, you should have already installed PyTorch and other libraries for running Moment-DETR following instructions in previous sections.
 ```bash
 pip install ffmpeg-python ftfy regex
 ```
