@@ -55,7 +55,7 @@ We recommend creating conda environment and installing all the dependencies as f
 # create conda env
 conda create --name moment_detr python=3.7
 # activate env
-conda actiavte moment_detr
+conda activate moment_detr
 # install pytorch with CUDA 11.0
 conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch
 # install other python packages
