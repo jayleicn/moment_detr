@@ -44,6 +44,8 @@ The prediction file [sample_val_preds.jsonl](sample_val_preds.jsonl) is in [JSON
 
 
 ### Codalab Submission
+**Note:** Codalab has been shut down, so I released the Ground Truth for the test split, please use it responsibly.
+
 To test your model's performance on `test` split, 
 please submit both `val` and `test` predictions to our 
 [Codalab evaluation server](https://codalab.lisn.upsaclay.fr/competitions/6937). 
