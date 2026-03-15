@@ -14,13 +14,19 @@ from moment_detr.position_encoding import build_position_encoding
 from moment_detr.misc import accuracy
 
 
-class MomentDETR(nn.Module):
+def inverse_sigmoid(x, eps=1e-3):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1/x2)
+
+class QDDETR(nn.Module):
     """ This is the Moment-DETR module that performs moment localization. """
 
     def __init__(self, transformer, position_embed, txt_position_embed, txt_dim, vid_dim,
                  num_queries, input_dropout, aux_loss=False,
                  contrastive_align_loss=False, contrastive_hdim=64,
-                 max_v_l=75, span_loss_type="l1", use_txt_pos=False, n_input_proj=2):
+                 max_v_l=75, span_loss_type="l1", use_txt_pos=False, n_input_proj=2, aud_dim=0):
         """ Initializes the model.
         Parameters:
             transformer: torch module of the transformer architecture. See transformer.py
@@ -55,7 +61,7 @@ class MomentDETR(nn.Module):
         self.n_input_proj = n_input_proj
         # self.foreground_thd = foreground_thd
         # self.background_thd = background_thd
-        self.query_embed = nn.Embedding(num_queries, hidden_dim)
+        self.query_embed = nn.Embedding(num_queries, 2)
         relu_args = [True] * 3
         relu_args[n_input_proj-1] = False
         self.input_txt_proj = nn.Sequential(*[
@@ -64,7 +70,7 @@ class MomentDETR(nn.Module):
             LinearLayer(hidden_dim, hidden_dim, layer_norm=True, dropout=input_dropout, relu=relu_args[2])
         ][:n_input_proj])
         self.input_vid_proj = nn.Sequential(*[
-            LinearLayer(vid_dim, hidden_dim, layer_norm=True, dropout=input_dropout, relu=relu_args[0]),
+            LinearLayer(vid_dim + aud_dim, hidden_dim, layer_norm=True, dropout=input_dropout, relu=relu_args[0]),
             LinearLayer(hidden_dim, hidden_dim, layer_norm=True, dropout=input_dropout, relu=relu_args[1]),
             LinearLayer(hidden_dim, hidden_dim, layer_norm=True, dropout=input_dropout, relu=relu_args[2])
         ][:n_input_proj])
@@ -74,10 +80,15 @@ class MomentDETR(nn.Module):
             self.contrastive_align_projection_txt = nn.Linear(hidden_dim, contrastive_hdim)
             self.contrastive_align_projection_vid = nn.Linear(hidden_dim, contrastive_hdim)
 
-        self.saliency_proj = nn.Linear(hidden_dim, 1)
+        self.saliency_proj1 = nn.Linear(hidden_dim, hidden_dim)
+        self.saliency_proj2 = nn.Linear(hidden_dim, hidden_dim)
         self.aux_loss = aux_loss
 
-    def forward(self, src_txt, src_txt_mask, src_vid, src_vid_mask):
+        self.hidden_dim = hidden_dim
+        self.global_rep_token = torch.nn.Parameter(torch.randn(hidden_dim))
+        self.global_rep_pos = torch.nn.Parameter(torch.randn(hidden_dim))
+
+    def forward(self, src_txt, src_txt_mask, src_vid, src_vid_mask, src_aud=None, src_aud_mask=None):
         """The forward expects two tensors:
                - src_txt: [batch_size, L_txt, D_txt]
                - src_txt_mask: [batch_size, L_txt], containing 0 on padded pixels,
@@ -94,6 +105,9 @@ class MomentDETR(nn.Module):
                - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a list of
                                 dictionnaries containing the two above keys for each decoder layer.
         """
+        if src_aud is not None:
+            src_vid = torch.cat([src_vid, src_aud], dim=2)
+            
         src_vid = self.input_vid_proj(src_vid)
         src_txt = self.input_txt_proj(src_txt)
         src = torch.cat([src_vid, src_txt], dim=1)  # (bsz, L_vid+L_txt, d)
@@ -105,9 +119,22 @@ class MomentDETR(nn.Module):
         # pad zeros for txt positions
         pos = torch.cat([pos_vid, pos_txt], dim=1)
         # (#layers, bsz, #queries, d), (bsz, L_vid+L_txt, d)
-        hs, memory = self.transformer(src, ~mask, self.query_embed.weight, pos)
+
+        # for global token
+        mask_ = torch.tensor([[True]]).to(mask.device).repeat(mask.shape[0], 1)
+        mask = torch.cat([mask_, mask], dim=1)
+        src_ = self.global_rep_token.reshape([1, 1, self.hidden_dim]).repeat(src.shape[0], 1, 1)
+        src = torch.cat([src_, src], dim=1)
+        pos_ = self.global_rep_pos.reshape([1, 1, self.hidden_dim]).repeat(pos.shape[0], 1, 1)
+        pos = torch.cat([pos_, pos], dim=1)
+
+        video_length = src_vid.shape[1]
+        
+        hs, reference, memory, memory_global = self.transformer(src, ~mask, self.query_embed.weight, pos, video_length=video_length)
         outputs_class = self.class_embed(hs)  # (#layers, batch_size, #queries, #classes)
-        outputs_coord = self.span_embed(hs)  # (#layers, bsz, #queries, 2 or max_v_l * 2)
+        reference_before_sigmoid = inverse_sigmoid(reference)
+        tmp = self.span_embed(hs)
+        outputs_coord = tmp + reference_before_sigmoid
         if self.span_loss_type == "l1":
             outputs_coord = outputs_coord.sigmoid()
         out = {'pred_logits': outputs_class[-1], 'pred_spans': outputs_coord[-1]}
@@ -123,9 +150,33 @@ class MomentDETR(nn.Module):
                 proj_txt_mem=proj_txt_mem,
                 proj_vid_mem=proj_vid_mem
             ))
+            
+            
+        # !!! this is code for test
+        if src_txt.shape[1] == 0:
+            print("There is zero text query. You should change codes properly")
+            exit(-1)
 
-        out["saliency_scores"] = self.saliency_proj(vid_mem).squeeze(-1)  # (bsz, L_vid)
+        ### Neg Pairs ###
+        src_txt_neg = torch.cat([src_txt[1:], src_txt[0:1]], dim=0)
+        src_txt_mask_neg = torch.cat([src_txt_mask[1:], src_txt_mask[0:1]], dim=0)
+        src_neg = torch.cat([src_vid, src_txt_neg], dim=1)
+        mask_neg = torch.cat([src_vid_mask, src_txt_mask_neg], dim=1).bool()
 
+        mask_neg = torch.cat([mask_, mask_neg], dim=1)
+        src_neg = torch.cat([src_, src_neg], dim=1)
+        pos_neg = pos.clone()  # since it does not use actual content
+
+        _, _, memory_neg, memory_global_neg = self.transformer(src_neg, ~mask_neg, self.query_embed.weight, pos_neg, video_length=video_length)
+        vid_mem_neg = memory_neg[:, :src_vid.shape[1]]
+
+
+        out["saliency_scores"] = (torch.sum(self.saliency_proj1(vid_mem) * self.saliency_proj2(memory_global).unsqueeze(1), dim=-1) / np.sqrt(self.hidden_dim))
+
+        out["saliency_scores_neg"] = (torch.sum(self.saliency_proj1(vid_mem_neg) * self.saliency_proj2(memory_global_neg).unsqueeze(1), dim=-1) / np.sqrt(self.hidden_dim))
+
+        # print(src_vid_mask.shape, src_vid.shape, vid_mem_neg.shape, vid_mem.shape)
+        out["video_mask"] = src_vid_mask
         if self.aux_loss:
             # assert proj_queries and proj_txt_mem
             out['aux_outputs'] = [
@@ -153,7 +204,7 @@ class SetCriterion(nn.Module):
     """
 
     def __init__(self, matcher, weight_dict, eos_coef, losses, temperature, span_loss_type, max_v_l,
-                 saliency_margin=1):
+                 saliency_margin=1, use_matcher=True):
         """ Create the criterion.
         Parameters:
             matcher: module able to compute a matching between targets and proposals
@@ -181,6 +232,9 @@ class SetCriterion(nn.Module):
         empty_weight = torch.ones(2)
         empty_weight[-1] = self.eos_coef  # lower weight for background (index 1, foreground index 0)
         self.register_buffer('empty_weight', empty_weight)
+        
+        # for tvsum,
+        self.use_matcher = use_matcher
 
     def loss_spans(self, outputs, targets, indices):
         """Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss
@@ -239,6 +293,56 @@ class SetCriterion(nn.Module):
         """higher scores for positive clips"""
         if "saliency_pos_labels" not in targets:
             return {"loss_saliency": 0}
+
+        vid_token_mask = outputs["video_mask"]
+
+        # Neg pair loss
+        saliency_scores_neg = outputs["saliency_scores_neg"].clone()  # (N, L)
+        # loss_neg_pair = torch.sigmoid(saliency_scores_neg).mean()
+        
+        loss_neg_pair = (- torch.log(1. - torch.sigmoid(saliency_scores_neg)) * vid_token_mask).sum(dim=1).mean()
+
+        saliency_scores = outputs["saliency_scores"].clone()  # (N, L)
+        saliency_contrast_label = targets["saliency_all_labels"]
+
+        saliency_scores = torch.cat([saliency_scores, saliency_scores_neg], dim=1)
+        saliency_contrast_label = torch.cat([saliency_contrast_label, torch.zeros_like(saliency_contrast_label)], dim=1)
+
+        vid_token_mask = vid_token_mask.repeat([1, 2])
+        saliency_scores = vid_token_mask * saliency_scores + (1. - vid_token_mask) * -1e+3
+
+        tau = 0.5
+        loss_rank_contrastive = 0.
+
+        # for rand_idx in range(1, 13, 3):
+        #     # 1, 4, 7, 10 --> 5 stages
+        for rand_idx in range(1, 12):
+            drop_mask = ~(saliency_contrast_label > 100)  # no drop
+            pos_mask = (saliency_contrast_label >= rand_idx)  # positive when equal or higher than rand_idx
+
+            if torch.sum(pos_mask) == 0:  # no positive sample
+                continue
+            else:
+                batch_drop_mask = torch.sum(pos_mask, dim=1) > 0  # negative sample indicator
+
+            # drop higher ranks
+            cur_saliency_scores = saliency_scores * drop_mask / tau + ~drop_mask * -1e+3
+
+            # numerical stability
+            logits = cur_saliency_scores - torch.max(cur_saliency_scores, dim=1, keepdim=True)[0]
+
+            # softmax
+            exp_logits = torch.exp(logits)
+            log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True) + 1e-6)
+
+            mean_log_prob_pos = (pos_mask * log_prob * vid_token_mask).sum(1) / (pos_mask.sum(1) + 1e-6)
+
+            loss = - mean_log_prob_pos * batch_drop_mask
+
+            loss_rank_contrastive = loss_rank_contrastive + loss.mean()
+
+        loss_rank_contrastive = loss_rank_contrastive / 12
+
         saliency_scores = outputs["saliency_scores"]  # (N, L)
         pos_indices = targets["saliency_pos_labels"]  # (N, #pairs)
         neg_indices = targets["saliency_neg_labels"]  # (N, #pairs)
@@ -249,7 +353,12 @@ class SetCriterion(nn.Module):
         neg_scores = torch.stack(
             [saliency_scores[batch_indices, neg_indices[:, col_idx]] for col_idx in range(num_pairs)], dim=1)
         loss_saliency = torch.clamp(self.saliency_margin + neg_scores - pos_scores, min=0).sum() \
-            / (len(pos_scores) * num_pairs) * 2  # * 2 to keep the loss the same scale
+                        / (len(pos_scores) * num_pairs) * 2  # * 2 to keep the loss the same scale
+
+        # print(loss_saliency, loss_rank_contrastive)
+        # loss_saliency = loss_saliency + loss_rank_contrastive
+        loss_saliency = loss_saliency + loss_rank_contrastive + loss_neg_pair
+        # loss_saliency = loss_rank_contrastive
         return {"loss_saliency": loss_saliency}
 
     def loss_contrastive_align(self, outputs, targets, indices, log=True):
@@ -325,25 +434,39 @@ class SetCriterion(nn.Module):
 
         # Retrieve the matching between the outputs of the last layer and the targets
         # list(tuples), each tuple is (pred_span_indices, tgt_span_indices)
-        indices = self.matcher(outputs_without_aux, targets)
+
+        # only for HL, do not use matcher
+        if self.use_matcher:
+            indices = self.matcher(outputs_without_aux, targets)
+            losses_target = self.losses
+        else:
+            indices = None
+            losses_target = ["saliency"]
 
         # Compute all the requested losses
         losses = {}
-        for loss in self.losses:
+        # for loss in self.losses:
+        for loss in losses_target:
             losses.update(self.get_loss(loss, outputs, targets, indices))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if 'aux_outputs' in outputs:
             for i, aux_outputs in enumerate(outputs['aux_outputs']):
-                indices = self.matcher(aux_outputs, targets)
-                for loss in self.losses:
+                # indices = self.matcher(aux_outputs, targets)
+                if self.use_matcher:
+                    indices = self.matcher(aux_outputs, targets)
+                    losses_target = self.losses
+                else:
+                    indices = None
+                    losses_target = ["saliency"]    
+                # for loss in self.losses:
+                for loss in losses_target:
                     if "saliency" == loss:  # skip as it is only in the top layer
                         continue
                     kwargs = {}
                     l_dict = self.get_loss(loss, aux_outputs, targets, indices, **kwargs)
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
-
         return losses
 
 
@@ -395,27 +518,45 @@ def build_model(args):
     # As another example, for a dataset that has a single class with id 1,
     # you should pass `num_classes` to be 2 (max_obj_id + 1).
     # For more details on this, check the following discussion
-    # https://github.com/facebookresearch/moment_detr/issues/108#issuecomment-650269223
+    # https://github.com/facebookresearch/qd_detr/issues/108#issuecomment-650269223
     device = torch.device(args.device)
 
     transformer = build_transformer(args)
     position_embedding, txt_position_embedding = build_position_encoding(args)
 
-    model = MomentDETR(
-        transformer,
-        position_embedding,
-        txt_position_embedding,
-        txt_dim=args.t_feat_dim,
-        vid_dim=args.v_feat_dim,
-        num_queries=args.num_queries,
-        input_dropout=args.input_dropout,
-        aux_loss=args.aux_loss,
-        contrastive_align_loss=args.contrastive_align_loss,
-        contrastive_hdim=args.contrastive_hdim,
-        span_loss_type=args.span_loss_type,
-        use_txt_pos=args.use_txt_pos,
-        n_input_proj=args.n_input_proj,
-    )
+    if args.a_feat_dir is None:
+        model = QDDETR(
+            transformer,
+            position_embedding,
+            txt_position_embedding,
+            txt_dim=args.t_feat_dim,
+            vid_dim=args.v_feat_dim,
+            num_queries=args.num_queries,
+            input_dropout=args.input_dropout,
+            aux_loss=args.aux_loss,
+            contrastive_align_loss=args.contrastive_align_loss,
+            contrastive_hdim=args.contrastive_hdim,
+            span_loss_type=args.span_loss_type,
+            use_txt_pos=args.use_txt_pos,
+            n_input_proj=args.n_input_proj,
+        )
+    else:
+        model = QDDETR(
+            transformer,
+            position_embedding,
+            txt_position_embedding,
+            txt_dim=args.t_feat_dim,
+            vid_dim=args.v_feat_dim,
+            aud_dim=args.a_feat_dim,
+            num_queries=args.num_queries,
+            input_dropout=args.input_dropout,
+            aux_loss=args.aux_loss,
+            contrastive_align_loss=args.contrastive_align_loss,
+            contrastive_hdim=args.contrastive_hdim,
+            span_loss_type=args.span_loss_type,
+            use_txt_pos=args.use_txt_pos,
+            n_input_proj=args.n_input_proj,
+        )
 
     matcher = build_matcher(args)
     weight_dict = {"loss_span": args.span_loss_coef,
@@ -434,11 +575,15 @@ def build_model(args):
     losses = ['spans', 'labels', 'saliency']
     if args.contrastive_align_loss:
         losses += ["contrastive_align"]
+        
+    # For tvsum dataset
+    use_matcher = not (args.dset_name == 'tvsum')
+        
     criterion = SetCriterion(
         matcher=matcher, weight_dict=weight_dict, losses=losses,
         eos_coef=args.eos_coef, temperature=args.temperature,
         span_loss_type=args.span_loss_type, max_v_l=args.max_v_l,
-        saliency_margin=args.saliency_margin
+        saliency_margin=args.saliency_margin, use_matcher=use_matcher,
     )
     criterion.to(device)
     return model, criterion
